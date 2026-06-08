@@ -22,7 +22,7 @@ import random
 from pathlib import Path
 from typing import Any, Iterator
 
-from .chat_formatter import PROMPT_VARIATIONS, format_sample
+from .chat_formatter import PDF_PROMPTS, PROMPT_VARIATIONS, format_pdf_sample, format_sample
 from .image_encoder import encode_capture_dir
 
 logger = logging.getLogger(__name__)
@@ -126,6 +126,91 @@ def convert_captures_to_records(
     logger.info(f"Loaded {len(records)} records ({skipped} skipped)")
 
     # Shuffle deterministically before splitting
+    rng = random.Random(seed)
+    rng.shuffle(records)
+    return records
+
+
+def convert_pdf_captures_to_records(
+    pdf_captures_dir: Path,
+    max_text_length: int = 8192,
+    seed: int = 42,
+    show_progress: bool = True,
+) -> list[dict[str, Any]]:
+    """
+    Convert Phase 1 PDF capture directories to dataset records.
+
+    Each capture directory contains N page PNGs + source.txt (all pages joined
+    with \\f) + metadata.json.  This function emits one record *per page* so
+    that individual page images pair with their extracted text.
+
+    Args:
+        pdf_captures_dir: Root PDF captures dir (data/pdf_captures).
+        max_text_length: Max characters kept per page's text.
+        seed: Shuffle seed.
+        show_progress: Log progress every 500 directories.
+
+    Returns:
+        List of dataset record dicts (images encoded lazily at build time).
+    """
+    records: list[dict[str, Any]] = []
+    skipped = 0
+    num_prompts = len(PDF_PROMPTS)
+
+    cap_dirs = list(_iter_capture_dirs(pdf_captures_dir))
+    logger.info(f"Found {len(cap_dirs)} PDF capture directories")
+
+    record_idx = 0
+    for i, cap_dir in enumerate(cap_dirs):
+        metadata_path = cap_dir / "metadata.json"
+        source_path = cap_dir / "source.txt"
+
+        try:
+            metadata = json.loads(metadata_path.read_text())
+            full_text = source_path.read_text(errors="replace")
+        except Exception as e:
+            logger.debug(f"Skipping {cap_dir}: {e}")
+            skipped += 1
+            continue
+
+        pages = full_text.split("\x0c")  # \f page separator written by text extractor
+        num_pages = metadata.get("num_pages", len(pages))
+
+        for page_idx in range(num_pages):
+            page_png = cap_dir / f"{page_idx:04d}.png"
+            if not page_png.exists():
+                continue
+
+            page_text = pages[page_idx].strip() if page_idx < len(pages) else ""
+            if len(page_text) > max_text_length:
+                page_text = page_text[:max_text_length]
+
+            prompt_idx = record_idx % num_prompts
+            formatted = format_pdf_sample(page_text, prompt_idx=prompt_idx)
+
+            records.append({
+                "file_hash": f"{cap_dir.name}_{page_idx:04d}",
+                "language": "text",
+                "domain": metadata.get("domain", ""),
+                "source_type": "pdf",
+                "page_idx": page_idx,
+                "num_pages": num_pages,
+                "cap_dir": str(cap_dir),
+                "page_png": str(page_png),
+                "source_code": page_text,
+                "prompt_idx": prompt_idx,
+                "messages": formatted["messages"],
+            })
+            record_idx += 1
+
+        if show_progress and (i + 1) % 500 == 0:
+            logger.info(
+                f"  Loaded {i + 1}/{len(cap_dirs)} PDF captures "
+                f"({record_idx} page records, {skipped} skipped)"
+            )
+
+    logger.info(f"Loaded {len(records)} PDF page records ({skipped} captures skipped)")
+
     rng = random.Random(seed)
     rng.shuffle(records)
     return records

@@ -24,6 +24,30 @@ data_collection:
   font_size: 14
   theme: "Default Dark+"
 
+# Phase 1b: PDF Knowledge Ingestion
+pdf_ingestion:
+  captures_dir: ./data/pdf_captures
+  knowledge_dir: /mnt/ssd/knowledge
+  domains:
+    - AI
+    - C
+    - Code
+    - Go
+    - Java
+    - Python
+    - Q#
+    - Red Team Knowledge
+    - Rust
+    - Rust Knowledge
+    - Specialized PDFs
+    - Sysadmin
+    - Theory
+    - Web
+    - x-platform
+  dpi: 300
+  output_width: 2560
+  workers: 4
+
 # Phase 2: Preprocessing
 preprocessing:
   dataset_name: cmndcntrlcyber/code-trainer-offsec-dataset
