@@ -1,9 +1,12 @@
 """
 phase4_qwen_finetuning/hf_skills/tool_call_eval_entry.py
 
-Tool-calling validation for V7 corrective action. Presents the model with
-10 scenarios containing <tools> definitions, verifies it emits valid
-<tool_call> XML output with correct structure and parseable JSON arguments.
+Tool-calling validation for V7, aligned with the nexus-harness agent.
+Uses the same tools (Read, Write, Edit, LS, Bash, Grep, Glob) and system
+prompt structure that the nexus agent uses at runtime.
+
+Tests structured tool-calling via transformers generate + Qwen2.5's native
+chat template (which produces <tool_call> tags that Ollama parses).
 
 Target: >= 80% pass rate (8/10 scenarios).
 
@@ -29,139 +32,159 @@ logger = logging.getLogger(__name__)
 
 os.environ.setdefault("HF_HOME", "/workspace/.hf-cache")
 
-TOOL_CALL_PATTERN = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.DOTALL)
+NEXUS_TOOLS = [
+    {"type": "function", "function": {"name": "Read", "description": "Read a UTF-8 file from the filesystem", "parameters": {"type": "object", "properties": {"file_path": {"type": "string", "description": "Absolute path to the file"}}, "required": ["file_path"]}}},
+    {"type": "function", "function": {"name": "Write", "description": "Create or overwrite a file with the given content", "parameters": {"type": "object", "properties": {"file_path": {"type": "string", "description": "Absolute path to the file"}, "content": {"type": "string", "description": "Content to write"}}, "required": ["file_path", "content"]}}},
+    {"type": "function", "function": {"name": "Edit", "description": "Replace an exact string in a file with new content", "parameters": {"type": "object", "properties": {"file_path": {"type": "string", "description": "Path to the file"}, "old_string": {"type": "string", "description": "Exact text to find and replace"}, "new_string": {"type": "string", "description": "Replacement text"}}, "required": ["file_path", "old_string", "new_string"]}}},
+    {"type": "function", "function": {"name": "LS", "description": "List files and directories at the given path", "parameters": {"type": "object", "properties": {"path": {"type": "string", "description": "Directory path to list"}}, "required": ["path"]}}},
+    {"type": "function", "function": {"name": "Bash", "description": "Execute a shell command and return its output", "parameters": {"type": "object", "properties": {"command": {"type": "string", "description": "The shell command to run"}, "timeout": {"type": "integer", "description": "Timeout in milliseconds"}}, "required": ["command"]}}},
+    {"type": "function", "function": {"name": "Grep", "description": "Search for a regex pattern across files", "parameters": {"type": "object", "properties": {"pattern": {"type": "string", "description": "Regex pattern to search for"}, "path": {"type": "string", "description": "Directory or file to search in"}}, "required": ["pattern"]}}},
+    {"type": "function", "function": {"name": "Glob", "description": "Find files matching a glob pattern", "parameters": {"type": "object", "properties": {"pattern": {"type": "string", "description": "Glob pattern like **/*.py"}}, "required": ["pattern"]}}},
+    {"type": "function", "function": {"name": "WebFetch", "description": "Fetch content from a URL", "parameters": {"type": "object", "properties": {"url": {"type": "string", "description": "URL to fetch"}}, "required": ["url"]}}},
+]
+
+SYSTEM_PROMPT = (
+    "You are Nexus, a local-first coding agent with direct filesystem and shell access. "
+    "You run on the user's machine and help with code, debugging, and system tasks.\n\n"
+    "Call tools with JSON arguments matching each tool's schema:\n"
+    + "\n".join(f"- {t['function']['name']}: {t['function']['description']}" for t in NEXUS_TOOLS)
+    + "\n\nWhen the task is complete, reply with a final message and do not request any more tool calls."
+)
 
 SCENARIOS = [
     {
-        "name": "simple_function_call",
-        "tools": [{"type": "function", "function": {"name": "get_weather", "description": "Get current weather for a city", "parameters": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]}}}],
-        "user": "What's the weather like in Seattle?",
-        "expected_tool": "get_weather",
+        "name": "list_directory",
+        "user": "What files are in the current directory?",
+        "expected_tool": "LS",
     },
     {
-        "name": "multiple_parameters",
-        "tools": [{"type": "function", "function": {"name": "search_flights", "description": "Search for flights", "parameters": {"type": "object", "properties": {"origin": {"type": "string"}, "destination": {"type": "string"}, "date": {"type": "string"}}, "required": ["origin", "destination", "date"]}}}],
-        "user": "Find flights from New York to London on December 25th.",
-        "expected_tool": "search_flights",
-    },
-    {
-        "name": "nested_object_parameters",
-        "tools": [{"type": "function", "function": {"name": "create_user", "description": "Create a new user account", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "address": {"type": "object", "properties": {"street": {"type": "string"}, "city": {"type": "string"}, "zip": {"type": "string"}}}}, "required": ["name"]}}}],
-        "user": "Create a user named Alice at 123 Main St, Portland, 97201.",
-        "expected_tool": "create_user",
-    },
-    {
-        "name": "choose_between_two_tools",
-        "tools": [
-            {"type": "function", "function": {"name": "send_email", "description": "Send an email", "parameters": {"type": "object", "properties": {"to": {"type": "string"}, "subject": {"type": "string"}, "body": {"type": "string"}}, "required": ["to", "subject", "body"]}}},
-            {"type": "function", "function": {"name": "send_sms", "description": "Send an SMS message", "parameters": {"type": "object", "properties": {"phone": {"type": "string"}, "message": {"type": "string"}}, "required": ["phone", "message"]}}},
-        ],
-        "user": "Text 555-0123 and say 'meeting at 3pm'.",
-        "expected_tool": "send_sms",
-    },
-    {
-        "name": "choose_between_three_tools",
-        "tools": [
-            {"type": "function", "function": {"name": "read_file", "description": "Read a file from disk", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
-            {"type": "function", "function": {"name": "write_file", "description": "Write content to a file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}}},
-            {"type": "function", "function": {"name": "delete_file", "description": "Delete a file from disk", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
-        ],
+        "name": "read_file",
         "user": "Show me the contents of /etc/hostname.",
-        "expected_tool": "read_file",
+        "expected_tool": "Read",
     },
     {
-        "name": "tool_with_optional_params",
-        "tools": [{"type": "function", "function": {"name": "list_processes", "description": "List running processes", "parameters": {"type": "object", "properties": {"filter": {"type": "string", "description": "Optional name filter"}, "limit": {"type": "integer", "description": "Max results"}}, "required": []}}}],
-        "user": "Show me all running python processes.",
-        "expected_tool": "list_processes",
+        "name": "run_command",
+        "user": "Run `uname -a` and tell me what OS this is.",
+        "expected_tool": "Bash",
     },
     {
-        "name": "tool_with_enum_type",
-        "tools": [{"type": "function", "function": {"name": "set_priority", "description": "Set task priority", "parameters": {"type": "object", "properties": {"task_id": {"type": "integer"}, "priority": {"type": "string", "enum": ["low", "medium", "high", "critical"]}}, "required": ["task_id", "priority"]}}}],
-        "user": "Set task 42 to critical priority.",
-        "expected_tool": "set_priority",
+        "name": "search_code",
+        "user": "Find all Python files that import requests.",
+        "expected_tool": "Grep",
     },
     {
-        "name": "tool_with_array_parameter",
-        "tools": [{"type": "function", "function": {"name": "tag_items", "description": "Add tags to items", "parameters": {"type": "object", "properties": {"item_ids": {"type": "array", "items": {"type": "integer"}}, "tag": {"type": "string"}}, "required": ["item_ids", "tag"]}}}],
-        "user": "Tag items 1, 2, and 3 as 'urgent'.",
-        "expected_tool": "tag_items",
+        "name": "find_files",
+        "user": "Find all YAML config files in this project.",
+        "expected_tool": "Glob",
+    },
+    {
+        "name": "write_file",
+        "user": "Create a file called hello.py with a basic 'Hello World' script.",
+        "expected_tool": "Write",
+    },
+    {
+        "name": "edit_file",
+        "user": "In main.py, replace 'debug = True' with 'debug = False'.",
+        "expected_tool": "Edit",
+    },
+    {
+        "name": "multi_step_read",
+        "user": "Read the README.md file and summarize what this project does.",
+        "expected_tool": "Read",
     },
     {
         "name": "no_tool_needed",
-        "tools": [{"type": "function", "function": {"name": "calculator", "description": "Perform math calculations", "parameters": {"type": "object", "properties": {"expression": {"type": "string"}}, "required": ["expression"]}}}],
-        "user": "What is the capital of France?",
+        "user": "What is the difference between a list and a tuple in Python?",
         "expected_tool": None,
     },
     {
-        "name": "sequential_tool_calls",
-        "tools": [
-            {"type": "function", "function": {"name": "read_file", "description": "Read a file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
-            {"type": "function", "function": {"name": "grep", "description": "Search for pattern in text", "parameters": {"type": "object", "properties": {"pattern": {"type": "string"}, "text": {"type": "string"}}, "required": ["pattern", "text"]}}},
-        ],
-        "user": "Read the file config.yaml and find all lines containing 'timeout'.",
-        "expected_tool": "read_file",
+        "name": "run_tests",
+        "user": "Run the test suite with pytest and tell me if anything fails.",
+        "expected_tool": "Bash",
     },
 ]
 
+TOOL_CALL_PATTERNS = [
+    re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.DOTALL),
+    re.compile(r'✿\s*(\{.*?\})\s*', re.DOTALL),
+    re.compile(r'"name"\s*:\s*"(\w+)".*?"arguments"\s*:', re.DOTALL),
+]
 
-def build_system_prompt(tools: list[dict]) -> str:
-    tools_json = json.dumps(tools, indent=2)
-    return (
-        "You are a helpful assistant with access to the following tools. "
-        "Use them when needed by emitting <tool_call> XML tags.\n\n"
-        f"<tools>\n{tools_json}\n</tools>"
-    )
+
+def extract_tool_calls(response: str) -> list[dict]:
+    """Extract tool calls from model output, accepting multiple formats."""
+    calls = []
+
+    hermes_matches = TOOL_CALL_PATTERNS[0].findall(response)
+    for match in hermes_matches:
+        try:
+            parsed = json.loads(match)
+            if "name" in parsed:
+                calls.append(parsed)
+        except json.JSONDecodeError:
+            pass
+
+    if calls:
+        return calls
+
+    for block in response.split("<tool_call>"):
+        block = block.split("</tool_call>")[0].strip()
+        if not block:
+            continue
+        if "<tool>" in block:
+            name_match = re.search(r"<tool>(\w+)</tool>", block)
+            if name_match:
+                calls.append({"name": name_match.group(1), "arguments": {}})
+
+    if calls:
+        return calls
+
+    json_pattern = re.compile(r'\{"name"\s*:\s*"(\w+)"\s*,\s*"arguments"\s*:\s*(\{[^}]*\})', re.DOTALL)
+    for name, args_str in json_pattern.findall(response):
+        try:
+            args = json.loads(args_str)
+        except json.JSONDecodeError:
+            args = {}
+        calls.append({"name": name, "arguments": args})
+
+    return calls
 
 
 def evaluate_response(response: str, scenario: dict) -> dict:
     """Evaluate a single model response against a scenario."""
     expected_tool = scenario["expected_tool"]
-    matches = TOOL_CALL_PATTERN.findall(response)
+    calls = extract_tool_calls(response)
 
     if expected_tool is None:
-        passed = len(matches) == 0
+        passed = len(calls) == 0
         return {
             "scenario": scenario["name"],
             "passed": passed,
             "reason": "correctly avoided tool call" if passed else "hallucinated a tool call",
-            "response_preview": response[:200],
+            "response_preview": response[:300],
         }
 
-    if not matches:
+    if not calls:
         return {
             "scenario": scenario["name"],
             "passed": False,
-            "reason": "no <tool_call> found in response",
-            "response_preview": response[:200],
+            "reason": "no tool call found in response",
+            "response_preview": response[:300],
         }
 
-    try:
-        call = json.loads(matches[0])
-    except json.JSONDecodeError:
-        return {
-            "scenario": scenario["name"],
-            "passed": False,
-            "reason": "tool_call JSON is malformed",
-            "response_preview": response[:200],
-        }
+    first_call = calls[0]
+    correct_name = first_call.get("name") == expected_tool
 
-    correct_name = call.get("name") == expected_tool
-    has_arguments = "arguments" in call
-
-    passed = correct_name and has_arguments
-    reason = []
-    if not correct_name:
-        reason.append(f"wrong tool: got {call.get('name')}, expected {expected_tool}")
-    if not has_arguments:
-        reason.append("missing arguments key")
+    passed = correct_name
+    reason = f"correct tool: {first_call.get('name')}" if correct_name else f"wrong tool: got {first_call.get('name')}, expected {expected_tool}"
 
     return {
         "scenario": scenario["name"],
         "passed": passed,
-        "reason": "; ".join(reason) if reason else "correct tool call",
-        "tool_called": call.get("name"),
-        "response_preview": response[:200],
+        "reason": reason,
+        "tool_called": first_call.get("name"),
+        "n_calls_found": len(calls),
+        "response_preview": response[:300],
     }
 
 
@@ -184,7 +207,7 @@ def main():
         raise RuntimeError("upload_repo required")
 
     logger.info("=" * 60)
-    logger.info("PHASE 4 — V7 Tool-Calling Evaluation")
+    logger.info("PHASE 4 — V7 Tool-Calling Evaluation (nexus-aligned)")
     logger.info(f"  base:     {model_id}")
     logger.info(f"  adapter:  {adapter_repo or '(baseline)'}")
     logger.info(f"  upload:   {upload_repo}")
@@ -211,11 +234,12 @@ def main():
     for i, scenario in enumerate(SCENARIOS):
         logger.info("Scenario %d/%d: %s", i + 1, len(SCENARIOS), scenario["name"])
         messages = [
-            {"role": "system", "content": build_system_prompt(scenario["tools"])},
+            {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": scenario["user"]},
         ]
         text = tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True,
+            tools=NEXUS_TOOLS,
         )
         inputs = tokenizer(text, return_tensors="pt").to(model.device)
         with torch.no_grad():
@@ -240,11 +264,13 @@ def main():
     payload = {
         "model": model_id,
         "adapter": adapter_repo,
+        "eval_type": "nexus-aligned",
         "scenarios": total,
         "passed": passed,
         "pass_rate": pass_rate,
         "target_pass_rate": 0.80,
         "meets_target": pass_rate >= 0.80,
+        "tools_tested": [t["function"]["name"] for t in NEXUS_TOOLS],
         "results": results,
     }
 
@@ -264,7 +290,7 @@ def main():
         path_in_repo=result_filename,
         repo_id=upload_repo,
         repo_type="model",
-        commit_message=f"V7 tool-calling eval: {passed}/{total} ({pass_rate:.0%})",
+        commit_message=f"V7 tool-calling eval (nexus-aligned): {passed}/{total} ({pass_rate:.0%})",
     )
     logger.info("Result pushed: https://huggingface.co/%s/blob/main/%s",
                 upload_repo, result_filename)

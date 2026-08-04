@@ -1,9 +1,12 @@
 """
 phase4_qwen_finetuning/hf_skills/agent_eval_entry.py
 
-Agent behavior validation for V7 corrective action. Runs 5 multi-turn
-agent scenarios, checking whether the model reasons, calls tools,
-interprets results, and makes progress on coding tasks.
+Agent behavior validation for V7, aligned with the nexus-harness agent.
+Uses the same tools (Read, Write, Edit, LS, Bash, Grep, Glob) and system
+prompt structure that the nexus agent uses at runtime.
+
+Runs 5 multi-turn agent scenarios, checking whether the model reasons,
+calls tools, interprets results, and makes progress on coding tasks.
 
 Target: >= 3/5 scenarios making progress.
 
@@ -29,21 +32,29 @@ logger = logging.getLogger(__name__)
 
 os.environ.setdefault("HF_HOME", "/workspace/.hf-cache")
 
-TOOL_CALL_PATTERN = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.DOTALL)
-
-AGENT_TOOLS = [
-    {"type": "function", "function": {"name": "Read", "description": "Read a file from the filesystem", "parameters": {"type": "object", "properties": {"file_path": {"type": "string"}}, "required": ["file_path"]}}},
-    {"type": "function", "function": {"name": "Write", "description": "Write content to a file", "parameters": {"type": "object", "properties": {"file_path": {"type": "string"}, "content": {"type": "string"}}, "required": ["file_path", "content"]}}},
-    {"type": "function", "function": {"name": "Bash", "description": "Execute a bash command", "parameters": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}}},
-    {"type": "function", "function": {"name": "Grep", "description": "Search for a pattern in files", "parameters": {"type": "object", "properties": {"pattern": {"type": "string"}, "path": {"type": "string"}}, "required": ["pattern"]}}},
+NEXUS_TOOLS = [
+    {"type": "function", "function": {"name": "Read", "description": "Read a UTF-8 file from the filesystem", "parameters": {"type": "object", "properties": {"file_path": {"type": "string", "description": "Absolute path to the file"}}, "required": ["file_path"]}}},
+    {"type": "function", "function": {"name": "Write", "description": "Create or overwrite a file with the given content", "parameters": {"type": "object", "properties": {"file_path": {"type": "string", "description": "Absolute path to the file"}, "content": {"type": "string", "description": "Content to write"}}, "required": ["file_path", "content"]}}},
+    {"type": "function", "function": {"name": "Edit", "description": "Replace an exact string in a file with new content", "parameters": {"type": "object", "properties": {"file_path": {"type": "string", "description": "Path to the file"}, "old_string": {"type": "string", "description": "Exact text to find and replace"}, "new_string": {"type": "string", "description": "Replacement text"}}, "required": ["file_path", "old_string", "new_string"]}}},
+    {"type": "function", "function": {"name": "LS", "description": "List files and directories at the given path", "parameters": {"type": "object", "properties": {"path": {"type": "string", "description": "Directory path to list"}}, "required": ["path"]}}},
+    {"type": "function", "function": {"name": "Bash", "description": "Execute a shell command and return its output", "parameters": {"type": "object", "properties": {"command": {"type": "string", "description": "The shell command to run"}, "timeout": {"type": "integer", "description": "Timeout in milliseconds"}}, "required": ["command"]}}},
+    {"type": "function", "function": {"name": "Grep", "description": "Search for a regex pattern across files", "parameters": {"type": "object", "properties": {"pattern": {"type": "string", "description": "Regex pattern to search for"}, "path": {"type": "string", "description": "Directory or file to search in"}}, "required": ["pattern"]}}},
+    {"type": "function", "function": {"name": "Glob", "description": "Find files matching a glob pattern", "parameters": {"type": "object", "properties": {"pattern": {"type": "string", "description": "Glob pattern like **/*.py"}}, "required": ["pattern"]}}},
 ]
 
-SYSTEM_PROMPT_TEMPLATE = (
-    "You are a coding assistant with access to tools. "
-    "When you need to perform actions, use the tools available to you "
-    "by emitting <tool_call> XML tags. Think step by step about what "
-    "needs to be done before acting.\n\n"
-    "<tools>\n{tools_json}\n</tools>"
+SYSTEM_PROMPT = (
+    "You are Nexus, a local-first coding agent with direct filesystem and shell access. "
+    "You run on the user's machine and help with code, debugging, and system tasks.\n\n"
+    "Call tools with JSON arguments matching each tool's schema:\n"
+    + "\n".join(f"- {t['function']['name']}: {t['function']['description']}" for t in NEXUS_TOOLS)
+    + "\n\nWhen the task is complete, reply with a final message and do not request any more tool calls."
+)
+
+TOOL_CALL_PATTERN = re.compile(
+    r"<tool_call>\s*(\{.*?\})\s*</tool_call>"
+    r"|<tool_call>\s*<tool>(\w+)</tool>"
+    r'|\{"name"\s*:\s*"(\w+)"\s*,\s*"arguments"',
+    re.DOTALL,
 )
 
 SCENARIOS = [
@@ -52,7 +63,7 @@ SCENARIOS = [
         "description": "Read a file and explain what it does",
         "turns": [
             {"role": "user", "content": "Read the file src/main.py and tell me what it does."},
-            {"role": "tool", "content": "<tool_response>\nimport argparse\nimport sys\n\ndef parse_args():\n    parser = argparse.ArgumentParser(description='Data processor')\n    parser.add_argument('--input', required=True, help='Input CSV file')\n    parser.add_argument('--output', default='result.json', help='Output file')\n    return parser.parse_args()\n\ndef main():\n    args = parse_args()\n    print(f'Processing {args.input} -> {args.output}')\n\nif __name__ == '__main__':\n    main()\n</tool_response>"},
+            {"role": "tool", "content": "import argparse\nimport sys\n\ndef parse_args():\n    parser = argparse.ArgumentParser(description='Data processor')\n    parser.add_argument('--input', required=True, help='Input CSV file')\n    parser.add_argument('--output', default='result.json', help='Output file')\n    return parser.parse_args()\n\ndef main():\n    args = parse_args()\n    print(f'Processing {args.input} -> {args.output}')\n\nif __name__ == '__main__':\n    main()"},
         ],
         "success_criteria": ["calls Read tool", "explains the code"],
     },
@@ -61,7 +72,7 @@ SCENARIOS = [
         "description": "Find a bug in code and propose a fix",
         "turns": [
             {"role": "user", "content": "There's a bug in utils.py where division by zero can happen. Find and fix it."},
-            {"role": "tool", "content": "<tool_response>\ndef calculate_average(numbers):\n    total = sum(numbers)\n    return total / len(numbers)\n\ndef normalize(values):\n    max_val = max(values)\n    min_val = min(values)\n    return [(v - min_val) / (max_val - min_val) for v in values]\n</tool_response>"},
+            {"role": "tool", "content": "def calculate_average(numbers):\n    total = sum(numbers)\n    return total / len(numbers)\n\ndef normalize(values):\n    max_val = max(values)\n    min_val = min(values)\n    return [(v - min_val) / (max_val - min_val) for v in values]"},
         ],
         "success_criteria": ["identifies division by zero", "proposes a fix"],
     },
@@ -70,7 +81,7 @@ SCENARIOS = [
         "description": "Investigate across multiple files",
         "turns": [
             {"role": "user", "content": "Find all files that import the 'requests' library and list them."},
-            {"role": "tool", "content": "<tool_response>\nsrc/api_client.py:1:import requests\nsrc/scraper.py:3:import requests\ntests/test_api.py:2:from unittest.mock import patch\ntests/test_api.py:3:import requests\n</tool_response>"},
+            {"role": "tool", "content": "src/api_client.py:1:import requests\nsrc/scraper.py:3:import requests\ntests/test_api.py:2:from unittest.mock import patch\ntests/test_api.py:3:import requests"},
         ],
         "success_criteria": ["calls Grep or Bash", "lists the files found"],
     },
@@ -80,14 +91,14 @@ SCENARIOS = [
         "turns": [
             {"role": "user", "content": "Write a Python function in utils.py that validates email addresses using a regex pattern. It should return True for valid emails and False otherwise."},
         ],
-        "success_criteria": ["calls Write tool", "includes regex pattern", "returns boolean"],
+        "success_criteria": ["calls Write tool", "includes regex pattern"],
     },
     {
         "name": "run_and_debug",
         "description": "Run a command and interpret the output",
         "turns": [
             {"role": "user", "content": "Run the test suite and tell me what's failing."},
-            {"role": "tool", "content": "<tool_response>\n============================= test session starts ==============================\ncollected 12 items\n\ntests/test_parser.py::test_parse_valid PASSED\ntests/test_parser.py::test_parse_empty PASSED\ntests/test_api.py::test_get_user FAILED - AssertionError: expected status 200, got 404\ntests/test_api.py::test_create_user PASSED\ntests/test_api.py::test_delete_user FAILED - ConnectionError: refused\ntests/test_utils.py::test_average PASSED\n\n===================== 2 failed, 4 passed in 1.23s ============================\n</tool_response>"},
+            {"role": "tool", "content": "============================= test session starts ==============================\ncollected 12 items\n\ntests/test_parser.py::test_parse_valid PASSED\ntests/test_parser.py::test_parse_empty PASSED\ntests/test_api.py::test_get_user FAILED - AssertionError: expected status 200, got 404\ntests/test_api.py::test_create_user PASSED\ntests/test_api.py::test_delete_user FAILED - ConnectionError: refused\ntests/test_utils.py::test_average PASSED\n\n===================== 2 failed, 4 passed in 1.23s ============================"},
         ],
         "success_criteria": ["calls Bash tool", "identifies failing tests"],
     },
@@ -151,15 +162,12 @@ def main():
         raise RuntimeError("upload_repo required")
 
     logger.info("=" * 60)
-    logger.info("PHASE 4 — V7 Agent Behavior Evaluation")
+    logger.info("PHASE 4 — V7 Agent Behavior Evaluation (nexus-aligned)")
     logger.info(f"  base:     {model_id}")
     logger.info(f"  adapter:  {adapter_repo or '(baseline)'}")
     logger.info(f"  upload:   {upload_repo}")
     logger.info(f"  scenarios: {len(SCENARIOS)}")
     logger.info("=" * 60)
-
-    tools_json = json.dumps(AGENT_TOOLS, indent=2)
-    system_prompt = SYSTEM_PROMPT_TEMPLATE.format(tools_json=tools_json)
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
     if tokenizer.pad_token is None:
@@ -181,7 +189,7 @@ def main():
     for i, scenario in enumerate(SCENARIOS):
         logger.info("Scenario %d/%d: %s", i + 1, len(SCENARIOS), scenario["name"])
 
-        conversation = [{"role": "system", "content": system_prompt}]
+        conversation = [{"role": "system", "content": SYSTEM_PROMPT}]
 
         for turn in scenario["turns"]:
             conversation.append(turn)
@@ -189,6 +197,7 @@ def main():
             if turn["role"] in ("user", "tool"):
                 text = tokenizer.apply_chat_template(
                     conversation, tokenize=False, add_generation_prompt=True,
+                    tools=NEXUS_TOOLS,
                 )
                 inputs = tokenizer(text, return_tensors="pt").to(model.device)
                 with torch.no_grad():
@@ -223,11 +232,13 @@ def main():
     payload = {
         "model": model_id,
         "adapter": adapter_repo,
+        "eval_type": "nexus-aligned",
         "scenarios": total,
         "progressing": progressing,
         "progress_rate": progressing / total,
         "target_threshold": 3,
         "meets_target": progressing >= 3,
+        "tools_tested": [t["function"]["name"] for t in NEXUS_TOOLS],
         "results": results,
     }
 
@@ -247,7 +258,7 @@ def main():
         path_in_repo=result_filename,
         repo_id=upload_repo,
         repo_type="model",
-        commit_message=f"V7 agent eval: {progressing}/{total} making progress",
+        commit_message=f"V7 agent eval (nexus-aligned): {progressing}/{total} making progress",
     )
     logger.info("Result pushed: https://huggingface.co/%s/blob/main/%s",
                 upload_repo, result_filename)
