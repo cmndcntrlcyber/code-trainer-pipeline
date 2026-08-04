@@ -157,7 +157,6 @@ def main():
         train_dataset=ds["train"],
         eval_dataset=ds["validation"],
         processing_class=tokenizer,
-        max_seq_length=max_seq_length,
     )
     trainer.train()
 
