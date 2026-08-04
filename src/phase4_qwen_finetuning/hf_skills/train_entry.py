@@ -38,13 +38,17 @@ logger = logging.getLogger(__name__)
 os.environ.setdefault("HF_HOME", "/workspace/.hf-cache")
 
 
-def _format_chat(example, tokenizer):
-    """Render the Phase 2 messages list into a single chat-templated string."""
+def _format_chat(example, tokenizer, max_length=4096):
+    """Render the Phase 2 messages list into a single chat-templated string, truncated."""
     text = tokenizer.apply_chat_template(
         example["messages"],
         tokenize=False,
         add_generation_prompt=False,
     )
+    tokens = tokenizer.encode(text, add_special_tokens=False)
+    if len(tokens) > max_length:
+        tokens = tokens[:max_length]
+        text = tokenizer.decode(tokens, skip_special_tokens=False)
     return {"text": text}
 
 
@@ -116,7 +120,7 @@ def main():
         ds["validation"] = ds["validation"].select(range(n))
         logger.info(f"  validation sliced to first {n} rows (PHASE4_VAL_LIMIT)")
 
-    ds = ds.map(lambda ex: _format_chat(ex, tokenizer),
+    ds = ds.map(lambda ex: _format_chat(ex, tokenizer, max_length=max_seq_length),
                 remove_columns=[c for c in ds["train"].column_names if c != "messages"])
     logger.info(f"  splits: {list(ds.keys())}  train={len(ds['train'])} val={len(ds['validation'])}")
 
