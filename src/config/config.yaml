@@ -131,7 +131,7 @@ vision_model:
     # job reconciles the rest of pyproject.toml.
     image: "huggingface/transformers-pytorch-gpu:latest"
     # Public repo cloned at job start. No GH token needed while public.
-    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-offsec-pipeline.git"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
     repo_ref: "main"
 
 # Phase 4: Qwen Fine-tuning (HF Skills Cloud — HF Jobs, mirrors Phase 3 pattern)
@@ -198,7 +198,7 @@ qwen_finetuning:
     timeout_seconds: 36000        # 10h ceiling — V7 (8192 seq) needs ~8h
     poll_interval: 60
     image: "huggingface/transformers-pytorch-gpu:latest"
-    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-offsec-pipeline.git"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
     repo_ref: "main"
     # Catastrophic-forgetting check (Ready Tensor capstone requirement). Run
     # via launch_benchmark.py with --adapter <repo> [--baseline]. GSM8K is the
@@ -221,10 +221,9 @@ deployment:
   port: 8080
   gguf_repo: ${HF_USERNAME}/qwen14b-code-trainer-gguf
 
-  # Source adapter for Phase 5 conversion. Locked to Phase 4A aggressive
-  # (eval_loss 0.4724 on full val) per docs/sweep/phase4b-summary.md —
-  # outperformed Phase 4B's 3-epoch slice (0.5126).
-  source_adapter: ${HF_USERNAME}/qwen14b-code-trainer-aggressive
+  # Source adapter for Phase 5 conversion. V7 mixed dataset corrective action
+  # (eval_loss 0.3592, restores tool-calling + agent capabilities).
+  source_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v7_mixed
   base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
 
   # HF Jobs cloud-job settings — same shape as vision_model.cloud
@@ -234,7 +233,7 @@ deployment:
     wait_timeout_seconds: 21600    # Local launcher --wait budget (queue + run, 6h)
     poll_interval: 60
     image: "huggingface/transformers-pytorch-gpu:latest"
-    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-offsec-pipeline.git"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
     repo_ref: "main"
     # Quantization levels to produce + upload. Q4_K_M is the architecture-doc
     # recommendation for the coder hot-swap target. Q5_K_M added for V7 to
@@ -281,7 +280,7 @@ abliteration:
     wait_timeout_seconds: 28800  # 8h local poll budget
     poll_interval: 60
     image: "huggingface/transformers-pytorch-gpu:latest"
-    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-offsec-pipeline.git"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
     repo_ref: "main"
     quants:
       - "Q4_K_M"
@@ -323,7 +322,7 @@ gemma_finetuning:
     timeout_seconds: 14400
     poll_interval: 60
     image: "huggingface/transformers-pytorch-gpu:latest"
-    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-offsec-pipeline.git"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
     repo_ref: "main"
     benchmark:
       task: "gsm8k"
@@ -349,7 +348,7 @@ gemma_deployment:
     wait_timeout_seconds: 21600
     poll_interval: 60
     image: "huggingface/transformers-pytorch-gpu:latest"
-    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-offsec-pipeline.git"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
     repo_ref: "main"
     quants:
       - "Q4_K_M"
