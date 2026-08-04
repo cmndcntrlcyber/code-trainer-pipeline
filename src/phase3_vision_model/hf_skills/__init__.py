@@ -51,15 +51,27 @@ def wait_for_job(
     token: str,
     poll_interval: int = 60,
     timeout: int = 36000,
+    max_retries: int = 5,
 ) -> str:
     """Block until a job leaves RUNNING. Returns final JobStage value (e.g. 'COMPLETED')."""
     api = HfApi(token=token)
     terminal = {JobStage.COMPLETED.value, JobStage.CANCELED.value,
                 JobStage.ERROR.value, JobStage.DELETED.value}
     start = time.time()
+    consecutive_errors = 0
     while True:
-        info = api.inspect_job(job_id=job_id)
-        stage = info.status.stage if info.status else "UNKNOWN"
+        try:
+            info = api.inspect_job(job_id=job_id)
+            stage = info.status.stage if info.status else "UNKNOWN"
+            consecutive_errors = 0
+        except (OSError, Exception) as e:
+            consecutive_errors += 1
+            if consecutive_errors > max_retries:
+                logger.error(f"Job {job_id}: {consecutive_errors} consecutive poll failures, giving up: {e}")
+                raise
+            logger.warning(f"Job {job_id}: poll failed ({consecutive_errors}/{max_retries}), retrying: {e}")
+            time.sleep(poll_interval)
+            continue
         logger.info(f"Job {job_id} stage: {stage}")
         if stage in terminal:
             if stage != JobStage.COMPLETED.value:

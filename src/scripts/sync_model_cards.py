@@ -12,7 +12,7 @@ Usage:
     set -a && source .env && set +a
     python -m src.scripts.sync_model_cards --dry-run
     python -m src.scripts.sync_model_cards
-    python -m src.scripts.sync_model_cards --only qwen14b-code-trainer-v6-aggressive
+    python -m src.scripts.sync_model_cards --only qwen14b-code-trainer-aggressive
 """
 import argparse
 import logging

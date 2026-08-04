@@ -5,8 +5,8 @@ Phase 5: Convert fine-tuned Qwen-14B LoRA → GGUF Q4_K_M and upload to HF Hub.
 
 Usage:
     python -m src.phase5_deployment.scripts.convert_to_gguf \
-        --config src/config/v6_config.yaml \
-        --adapter-repo combatcougar/qwen14b-code-trainer-v6-standard \
+        --config src/config/config.yaml \
+        --adapter-repo combatcougar/qwen14b-code-trainer-standard \
         --llama-cpp /path/to/llama.cpp \
         --push-to-hub
 """
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     parser = argparse.ArgumentParser(description="Phase 5: Convert to GGUF")
-    parser.add_argument("--config", default="src/config/v6_config.yaml")
+    parser.add_argument("--config", default="src/config/config.yaml")
     parser.add_argument("--adapter-repo", required=True,
                         help="HF Hub repo ID of the fine-tuned LoRA adapter")
     parser.add_argument("--llama-cpp", required=True,
@@ -68,7 +68,7 @@ def main():
             logger.error("HF_TOKEN not set — cannot push to Hub")
             sys.exit(1)
 
-        gguf_repo = deploy_cfg.get("gguf_repo", "combatcougar/qwen14b-code-trainer-v6-gguf")
+        gguf_repo = deploy_cfg.get("gguf_repo", "combatcougar/qwen14b-code-trainer-gguf")
         uploader = GGUFUploader(token=hf_token)
 
         # Load evaluation results if available
@@ -81,7 +81,7 @@ def main():
         if (eval_dir / "finetuned.json").exists():
             finetuned = json.loads((eval_dir / "finetuned.json").read_text())
 
-        wandb_url = os.environ.get("WANDB_PROJECT_URL", "https://wandb.ai/combatcougar/code-trainer-v6-phase4")
+        wandb_url = os.environ.get("WANDB_PROJECT_URL", "https://wandb.ai/combatcougar/code-trainer-phase4")
 
         model_card_params = {
             "num_samples": 32727,

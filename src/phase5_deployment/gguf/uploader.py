@@ -32,7 +32,7 @@ for code generation from VS Code screenshot transcription tasks.
 
 ## Model Description
 
-This model was fine-tuned as part of the **Code-Trainer V6 (RTPI)** project —
+This model was fine-tuned as part of the **Code-Trainer (RTPI)** project —
 a multimodal code generation pipeline trained on {num_samples:,}+ VS Code screenshot captures
 across 8 programming languages.
 
@@ -73,7 +73,7 @@ from llama_cpp import Llama
 llm = Llama(
     model_path="path/to/model_q4_k_m.gguf",
     n_gpu_layers=-1,
-    n_ctx=4096,
+    n_ctx=8192,
 )
 
 response = llm.create_chat_completion(messages=[
@@ -90,9 +90,9 @@ W&B project: {wandb_url}
 ## Citation
 
 ```
-@misc{{code-trainer-v6,
+@misc{{code-trainer,
   author = {{combatcougar}},
-  title = {{Code-Trainer V6: Multimodal Code Generation from VS Code Screenshots}},
+  title = {{Code-Trainer: Multimodal Code Generation from VS Code Screenshots}},
   year = {{2026}},
 }}
 ```

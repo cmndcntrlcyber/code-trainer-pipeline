@@ -10,7 +10,7 @@ tags:
 - peft
 - swin
 - qwen2.5-coder
-- code-trainer-v6
+- code-trainer
 datasets:
 - cmndcntrlcyber/code-trainer-offsec-dataset
 pipeline_tag: image-to-text
@@ -23,7 +23,7 @@ A multimodal **screenshot → code** model: a frozen
 encoder, an MLP projector, and a LoRA adapter for
 [`Qwen/Qwen2.5-Coder-1.5B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct).
 
-This is **Phase 3** of the Code-Trainer V6 / RTPI pipeline
+This is **Phase 3** of the Code-Trainer / RTPI pipeline
 ([GitHub](https://github.com/cmndcntrlcyber/code-trainer-offsec-pipeline)) —
 the multimodal stage that takes a Monaco-Editor-rendered VS Code screenshot of
 source code and emits the underlying source.
@@ -150,7 +150,7 @@ print(model.generate(image, max_new_tokens=512))
 * **Training launcher:**
   ```bash
   python -m src.phase3_vision_model.scripts.launch_vision_training \
-      --config src/config/v6_config.yaml --wait
+      --config src/config/config.yaml --wait
   ```
 * **W&B project:** [`rtpi-phase3-vision`](https://wandb.ai/cmndcntrlcyber-c3s-consulting/rtpi-phase3-vision).
 * **Cost:** approximately $18 on `a100-large` (~5.5 h training + ~20 min eval).

@@ -1,9 +1,9 @@
 {
-  "adapter_base": "cmndcntrlcyber/qwen14b-code-trainer-v6",
+  "adapter_base": "cmndcntrlcyber/qwen14b-code-trainer",
   "rows": [
     {
       "name": "aggressive",
-      "adapter_repo": "cmndcntrlcyber/qwen14b-code-trainer-v6-aggressive",
+      "adapter_repo": "cmndcntrlcyber/qwen14b-code-trainer-aggressive",
       "job_id": "69f7659298a8d679adfb8b8e",
       "stage": "ERROR",
       "lora_r": 64,
@@ -30,7 +30,7 @@
     },
     {
       "name": "standard",
-      "adapter_repo": "cmndcntrlcyber/qwen14b-code-trainer-v6-standard",
+      "adapter_repo": "cmndcntrlcyber/qwen14b-code-trainer-standard",
       "job_id": "69f746449d85bec4d76f140e",
       "stage": "ERROR",
       "lora_r": 32,
@@ -57,7 +57,7 @@
     },
     {
       "name": "conservative",
-      "adapter_repo": "cmndcntrlcyber/qwen14b-code-trainer-v6-conservative",
+      "adapter_repo": "cmndcntrlcyber/qwen14b-code-trainer-conservative",
       "job_id": "69f7658e98a8d679adfb8b8c",
       "stage": "ERROR",
       "lora_r": 16,
@@ -85,7 +85,7 @@
   ],
   "best": {
     "name": "aggressive",
-    "adapter_repo": "cmndcntrlcyber/qwen14b-code-trainer-v6-aggressive",
+    "adapter_repo": "cmndcntrlcyber/qwen14b-code-trainer-aggressive",
     "job_id": "69f7659298a8d679adfb8b8e",
     "stage": "ERROR",
     "lora_r": 64,

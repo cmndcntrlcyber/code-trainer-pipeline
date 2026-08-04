@@ -9,11 +9,11 @@ on the Qwen-14B merge step.
 Usage:
     set -a && source .env && set +a
     python -m src.phase5_deployment.scripts.launch_convert \\
-        --config src/config/v6_config.yaml --wait
+        --config src/config/config.yaml --wait
 
     # Override adapter / quants:
     python -m src.phase5_deployment.scripts.launch_convert \\
-        --adapter cmndcntrlcyber/qwen14b-code-trainer-v6-aggressive \\
+        --adapter cmndcntrlcyber/qwen14b-code-trainer-aggressive \\
         --quants Q4_K_M Q5_K_M Q8_0 --wait
 
     # Dry-run:
@@ -59,7 +59,7 @@ def build_convert_command(repo_url: str, repo_ref: str) -> list[str]:
 
 def main():
     parser = argparse.ArgumentParser(description="Phase 5 GGUF conversion (HF Jobs)")
-    parser.add_argument("--config", default="src/config/v6_config.yaml")
+    parser.add_argument("--config", default="src/config/config.yaml")
     parser.add_argument("--adapter", default=None,
                         help="Override deployment.source_adapter")
     parser.add_argument("--gguf-repo", default=None,

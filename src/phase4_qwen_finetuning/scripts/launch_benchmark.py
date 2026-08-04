@@ -11,12 +11,12 @@ Usage:
 
     # Fine-tuned adapter run (writes phase4-benchmark-gsm8k.json to adapter repo):
     python -m src.phase4_qwen_finetuning.scripts.launch_benchmark \\
-        --adapter cmndcntrlcyber/qwen14b-code-trainer-v6-aggressive --wait
+        --adapter cmndcntrlcyber/qwen14b-code-trainer-aggressive --wait
 
     # Baseline run (writes phase4-benchmark-gsm8k-base.json to the same adapter
     # repo so both rows live next to each other):
     python -m src.phase4_qwen_finetuning.scripts.launch_benchmark \\
-        --adapter cmndcntrlcyber/qwen14b-code-trainer-v6-aggressive \\
+        --adapter cmndcntrlcyber/qwen14b-code-trainer-aggressive \\
         --baseline --wait
 
     # Override task / shot count:
@@ -66,7 +66,7 @@ def build_benchmark_command(repo_url: str, repo_ref: str, lm_eval_pin: str) -> l
 def main():
     parser = argparse.ArgumentParser(
         description="Phase 4 general benchmark (lm-eval-harness, HF Jobs)")
-    parser.add_argument("--config", default="src/config/v6_config.yaml")
+    parser.add_argument("--config", default="src/config/config.yaml")
     parser.add_argument("--adapter", required=True,
                         help="Adapter repo. Used as upload target for both "
                              "fine-tuned and baseline runs so the rows live "

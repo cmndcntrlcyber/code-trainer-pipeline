@@ -7,7 +7,7 @@ Usage:
     export HF_TOKEN=hf_...
     export WANDB_API_KEY=...
     python -m src.phase3_vision_model.scripts.launch_vision_training \
-        --config src/config/v6_config.yaml
+        --config src/config/config.yaml
 
     # Dry-run (print JobSpec, don't submit):
     python -m src.phase3_vision_model.scripts.launch_vision_training --dry-run
@@ -102,7 +102,7 @@ def build_job_spec(
 
 def main():
     parser = argparse.ArgumentParser(description="Launch Phase 3 A100 vision training (HF Jobs)")
-    parser.add_argument("--config", default="src/config/v6_config.yaml")
+    parser.add_argument("--config", default="src/config/config.yaml")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print the job spec without submitting")
     parser.add_argument("--wait", action="store_true",

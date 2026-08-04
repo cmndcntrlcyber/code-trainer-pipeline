@@ -11,7 +11,7 @@ Usage:
 
     # Custom adapter base / output dir:
     python -m src.phase4_qwen_finetuning.scripts.generate_report \
-        --adapter-base cmndcntrlcyber/qwen14b-code-trainer-v6 \
+        --adapter-base cmndcntrlcyber/qwen14b-code-trainer \
         --out docs/sweep/phase4a-summary.md
 """
 import argparse
@@ -78,7 +78,7 @@ def _job_state(job_ids_path: Path, name: str, token: str) -> tuple[str, str | No
 
 def main():
     parser = argparse.ArgumentParser(description="Aggregate Phase 4A sweep results")
-    parser.add_argument("--config", default="src/config/v6_config.yaml")
+    parser.add_argument("--config", default="src/config/config.yaml")
     parser.add_argument("--adapter-base", default=None,
                         help="Override; defaults to qwen_finetuning.cloud.adapter_base")
     parser.add_argument("--out", default="docs/sweep/phase4a-summary.md")
@@ -164,7 +164,7 @@ def main():
         lines.append("")
         lines.append("```bash")
         lines.append("python -m src.phase4_qwen_finetuning.scripts.launch_full_training \\")
-        lines.append("  --config src/config/v6_config.yaml \\")
+        lines.append("  --config src/config/config.yaml \\")
         lines.append(f"  --best-config {best['name']} --wait")
         lines.append("```")
     else:

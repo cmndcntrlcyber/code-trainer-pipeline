@@ -10,7 +10,7 @@ RTPI combines two workstreams into a unified local AI system:
 
 | Pillar | Purpose | Source Document |
 |--------|---------|-----------------|
-| **Training Pipeline** (Phases 1–5) | Build a multimodal code generation model from VS Code screenshots, fine-tune Qwen-14B via cloud GPU, and deploy as GGUF | `Code-Trainer-V6-RTX5060Ti-Single-GPU.md` |
+| **Training Pipeline** (Phases 1–5) | Build a multimodal code generation model from VS Code screenshots, fine-tune Qwen-14B via cloud GPU, and deploy as GGUF | `Code-Trainer-RTX5060Ti-Single-GPU.md` |
 | **Inference & Agent Stack** (Phase 6) | Serve Qwen3.5-9B as primary local model with vLLM + Qwen-Agent + MCP tool integration | `Inference-Agent-Architecture.md` |
 
 **Hardware:** MSI RTX 5060 Ti 16GB Ventus 3X OC (Blackwell) — $520 — **inference only (Phase 6)**
@@ -28,7 +28,7 @@ RTPI combines two workstreams into a unified local AI system:
 | 1 — Data Collection | ✓ Complete | 32,727 captures, 8 languages | — |
 | 2 — Preprocessing | ✓ Complete | Dataset on HF Hub: `main` (text-only) + `v2-multimodal` (images, base64 WebP, 26126/3265/3267) | — |
 | 3 — Vision Model Training | ✓ Complete | A100 job `69f55aeb98a8d679adfb8621` ran 5h 34m (2026-05-02). Adapter at `cmndcntrlcyber/code-trainer-vision-adapter`. Eval (test/200): finetuned `syntax_valid_rate` 0.61 vs 0.20 baseline (3.13×), `mean_edit_similarity` +16.8%; `exact_match`/`bleu_4` both 0 — model paraphrases, doesn't reconstruct verbatim. Details in `docs/eval/phase3-summary.md`. | — |
-| 4 — Qwen-14B Fine-tuning | ⚠ In flight (Phase 4A sweep) | Pivoted from broken AutoTrain path to HF Jobs (mirror Phase 3). 3 A100-large jobs submitted 2026-05-03: `qwen14b-{conservative,standard,aggressive}`. Adapters publish to `cmndcntrlcyber/qwen14b-code-trainer-v6-{name}`. | Wait for terminal stages, pick best by eval_loss, launch Phase 4B |
+| 4 — Qwen-14B Fine-tuning | ⚠ In flight (Phase 4A sweep) | Pivoted from broken AutoTrain path to HF Jobs (mirror Phase 3). 3 A100-large jobs submitted 2026-05-03: `qwen14b-{conservative,standard,aggressive}`. Adapters publish to `cmndcntrlcyber/qwen14b-code-trainer-{name}`. | Wait for terminal stages, pick best by eval_loss, launch Phase 4B |
 | 5 — GGUF Deployment | ⚠ Ready (blocked) | Infrastructure only | Awaits Phase 4 checkpoint |
 | 6 — Inference & Agent Stack | ⚠ Scaffolded | `src/phase6_inference/` — vllm_serve.sh, qwen_agent_client.py, mcp_servers.json, hot_swap.py, scripts/setup.md. Code-only; deployment is an inference-host task separate from training deps. | Build vLLM nightly on the 5060 Ti host, smoke-test agent + MCP |
 

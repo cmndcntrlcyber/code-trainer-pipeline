@@ -6,13 +6,13 @@ Standalone evaluation script — run baseline or post-FT evaluation independentl
 Usage:
     # Baseline (base model, no checkpoint):
     python -m src.phase3_vision_model.scripts.evaluate \
-        --config src/config/v6_config.yaml \
+        --config src/config/config.yaml \
         --dataset-dir data/hf_dataset \
         --run-name baseline
 
     # Post-fine-tuning:
     python -m src.phase3_vision_model.scripts.evaluate \
-        --config src/config/v6_config.yaml \
+        --config src/config/config.yaml \
         --dataset-dir data/hf_dataset \
         --checkpoint models/vision_model/best \
         --run-name finetuned
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     parser = argparse.ArgumentParser(description="Phase 3: Evaluate CodeVisionModel")
-    parser.add_argument("--config", default="src/config/v6_config.yaml")
+    parser.add_argument("--config", default="src/config/config.yaml")
     parser.add_argument("--dataset-dir", default="data/hf_dataset")
     parser.add_argument("--checkpoint", default=None,
                         help="Path to fine-tuned checkpoint (omit for base model)")

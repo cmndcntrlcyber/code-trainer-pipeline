@@ -16,5 +16,5 @@ echo "Xvfb running on :99"
 
 # Run the data collection pipeline
 exec python3 -m phase1_data_collection.scripts.run_collection \
-    --config config/v6_config.yaml \
+    --config config/config.yaml \
     "$@"

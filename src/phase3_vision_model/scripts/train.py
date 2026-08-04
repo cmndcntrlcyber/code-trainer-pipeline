@@ -7,13 +7,13 @@ Satisfies Capstone Requirements #2, #3, #4, #5.
 
 Usage:
     python -m src.phase3_vision_model.scripts.train \
-        --config src/config/v6_config.yaml \
+        --config src/config/config.yaml \
         --dataset-dir data/hf_dataset \
         --output-dir models/vision_model
 
     # Skip baseline evaluation (faster iteration):
     python -m src.phase3_vision_model.scripts.train \
-        --config src/config/v6_config.yaml --skip-baseline
+        --config src/config/config.yaml --skip-baseline
 """
 import argparse
 import logging
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     parser = argparse.ArgumentParser(description="Phase 3: Train CodeVisionModel")
-    parser.add_argument("--config", default="src/config/v6_config.yaml")
+    parser.add_argument("--config", default="src/config/config.yaml")
     parser.add_argument("--dataset-dir", default="data/hf_dataset")
     parser.add_argument("--output-dir", default="models/vision_model")
     parser.add_argument("--skip-baseline", action="store_true",

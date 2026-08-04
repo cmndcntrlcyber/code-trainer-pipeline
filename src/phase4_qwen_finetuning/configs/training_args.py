@@ -16,7 +16,7 @@ def build_training_args(
     output_dir: str | Path,
     num_epochs: int = 1,
     max_seq_length: int = 2048,
-    wandb_project: str = "code-trainer-v6-phase4",
+    wandb_project: str = "code-trainer-phase4",
 ) -> TrainingArguments:
     """
     Build TrainingArguments for a given sweep config.

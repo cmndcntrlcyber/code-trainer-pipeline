@@ -8,12 +8,12 @@ to the adapter repo.
 Usage:
     set -a && source .env && set +a
     python -m src.phase4_qwen_finetuning.scripts.launch_eval \\
-        --adapter cmndcntrlcyber/qwen14b-code-trainer-v6-aggressive-full3 \\
+        --adapter cmndcntrlcyber/qwen14b-code-trainer-aggressive-full3 \\
         --wait
 
     # Slice val for a quick smoke (~$0.30):
     python -m src.phase4_qwen_finetuning.scripts.launch_eval \\
-        --adapter cmndcntrlcyber/qwen14b-code-trainer-v6-aggressive-full3 \\
+        --adapter cmndcntrlcyber/qwen14b-code-trainer-aggressive-full3 \\
         --val-limit 500 --wait
 """
 import argparse
@@ -55,7 +55,7 @@ def build_eval_command(repo_url: str, repo_ref: str) -> list[str]:
 
 def main():
     parser = argparse.ArgumentParser(description="Phase 4 eval-only (HF Jobs)")
-    parser.add_argument("--config", default="src/config/v6_config.yaml")
+    parser.add_argument("--config", default="src/config/config.yaml")
     parser.add_argument("--adapter", required=True,
                         help="Adapter repo to evaluate (e.g. ...-aggressive-full3)")
     parser.add_argument("--val-limit", type=int, default=None,

@@ -60,7 +60,7 @@ class SweepOrchestrator:
                 "bf16": True,
                 "gradient_checkpointing": True,
                 "report_to": "wandb",
-                "wandb_project": "code-trainer-v6-phase4",
+                "wandb_project": "code-trainer-phase4",
                 "run_name": f"sweep-{cfg.name}",
             },
         )

@@ -6,7 +6,7 @@ Extend the Phase 1 data collection pipeline to target **offensive security repos
 
 ## Motivation
 
-The base Code-Trainer V6 pipeline collects general-purpose code across 8 languages. For the rtpi project's security operations use case, a specialized dataset of offensive security code will produce significantly better results when fine-tuning Qwen models for:
+The base Code-Trainer pipeline collects general-purpose code across 8 languages. For the rtpi project's security operations use case, a specialized dataset of offensive security code will produce significantly better results when fine-tuning Qwen models for:
 
 - Generating exploit proof-of-concepts
 - Writing red team automation scripts

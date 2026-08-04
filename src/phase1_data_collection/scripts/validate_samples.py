@@ -78,8 +78,8 @@ def validate_capture_dir(capture_dir: Path) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description="Validate captured samples")
-    parser.add_argument("--config", default="src/config/v6_config.yaml",
-                        help="Path to v6_config.yaml")
+    parser.add_argument("--config", default="src/config/config.yaml",
+                        help="Path to config.yaml")
     parser.add_argument("--captures-dir", default=None,
                         help="Override captures directory")
     parser.add_argument("--fix", action="store_true",

@@ -17,7 +17,7 @@ Expected env vars inside the job:
     HF_TOKEN             — write access to the per-config adapter repo
     WANDB_API_KEY        — optional; if absent, runs offline
     PHASE4_PARAMS_JSON   — full hyperparam blob (see SweepConfig + cloud.* below)
-    PHASE4_ADAPTER_REPO  — e.g. cmndcntrlcyber/qwen14b-code-trainer-v6-conservative
+    PHASE4_ADAPTER_REPO  — e.g. cmndcntrlcyber/qwen14b-code-trainer-conservative
 """
 import json
 import logging
@@ -133,7 +133,7 @@ def main():
     lora_cfg = LoraConfig(
         r=cfg.lora_r,
         lora_alpha=cfg.lora_alpha,
-        lora_dropout=0.05,
+        lora_dropout=float(params.get("lora_dropout", 0.05)),
         bias="none",
         task_type="CAUSAL_LM",
         target_modules=LORA_TARGET_MODULES,
@@ -157,6 +157,7 @@ def main():
         train_dataset=ds["train"],
         eval_dataset=ds["validation"],
         processing_class=tokenizer,
+        max_seq_length=max_seq_length,
     )
     trainer.train()
 

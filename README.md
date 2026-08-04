@@ -1,4 +1,4 @@
-# Code-Trainer V6
+# Code-Trainer
 
 [Final Dataset on Hugging Face](https://huggingface.co/datasets/cmndcntrlcyber/code-trainer-offsec-dataset)
 
@@ -36,7 +36,7 @@ root/
 ├── src/                       # Source code
 │   ├── config/                # Configuration files
 │   │   ├── settings.py        # YAML loader with env var substitution
-│   │   ├── v6_config.yaml     # Central config for all 6 phases
+│   │   ├── config.yaml     # Central config for all 6 phases
 │   │   └── offsec_config.yaml # Offensive security collection config
 │   │
 │   ├── phase1_data_collection/  # Phase 1: Data collection pipeline [COMPLETE]
@@ -85,40 +85,40 @@ playwright install chromium   # Required for screenshot capture
 # --- Phase 1: Data Collection ---
 
 # Run full collection pipeline (scrape + capture)
-python -m src.phase1_data_collection.scripts.run_collection --config src/config/v6_config.yaml
+python -m src.phase1_data_collection.scripts.run_collection --config src/config/config.yaml
 
 # Run scraping only (skip screenshot capture)
-python -m src.phase1_data_collection.scripts.run_collection --config src/config/v6_config.yaml --skip-capture
+python -m src.phase1_data_collection.scripts.run_collection --config src/config/config.yaml --skip-capture
 
 # Run offensive security collection
 python -m src.phase1_data_collection.scripts.run_offsec_collection --config src/config/offsec_config.yaml
 
 # Validate captured samples
-python -m src.phase1_data_collection.scripts.validate_samples --config src/config/v6_config.yaml
+python -m src.phase1_data_collection.scripts.validate_samples --config src/config/config.yaml
 
 # --- Phase 2: Preprocessing ---
 
 # Build HuggingFace dataset from captures
-python -m src.phase2_preprocessing.scripts.build_dataset --config src/config/v6_config.yaml
+python -m src.phase2_preprocessing.scripts.build_dataset --config src/config/config.yaml
 
 # Upload dataset to HF Hub (required to unblock Phases 3–4)
-python -m src.phase2_preprocessing.scripts.upload_to_hub --config src/config/v6_config.yaml
+python -m src.phase2_preprocessing.scripts.upload_to_hub --config src/config/config.yaml
 
 # Compute dataset statistics
-python -m src.phase2_preprocessing.scripts.compute_statistics --config src/config/v6_config.yaml
+python -m src.phase2_preprocessing.scripts.compute_statistics --config src/config/config.yaml
 
 # --- Phase 3: Vision Model Training (RTX 5060 Ti) ---
 
-python -m src.phase3_vision_model.scripts.train --config src/config/v6_config.yaml
+python -m src.phase3_vision_model.scripts.train --config src/config/config.yaml
 
 # --- Phase 4: Qwen-14B Fine-tuning (HF Skills Cloud) ---
 
-python -m src.phase4_qwen_finetuning.scripts.launch_validation_sweep --config src/config/v6_config.yaml
-python -m src.phase4_qwen_finetuning.scripts.monitor_jobs --config src/config/v6_config.yaml
+python -m src.phase4_qwen_finetuning.scripts.launch_validation_sweep --config src/config/config.yaml
+python -m src.phase4_qwen_finetuning.scripts.monitor_jobs --config src/config/config.yaml
 
 # --- Phase 5: GGUF Deployment ---
 
-python -m src.phase5_deployment.scripts.convert_to_gguf --config src/config/v6_config.yaml
+python -m src.phase5_deployment.scripts.convert_to_gguf --config src/config/config.yaml
 
 # --- Tests ---
 uv run pytest tests/
@@ -140,7 +140,7 @@ a job that originally ran offline):
 ```bash
 WANDB_API_KEY=<key> WANDB_MODE=online \
   python -m src.phase4_qwen_finetuning.scripts.launch_eval \
-  --adapter cmndcntrlcyber/qwen14b-code-trainer-v6-aggressive \
+  --adapter cmndcntrlcyber/qwen14b-code-trainer-aggressive \
   --val-limit 500 --wait
 ```
 
@@ -154,7 +154,7 @@ benchmark (GSM8K via lm-evaluation-harness) is launched with:
 
 ```bash
 python -m src.phase4_qwen_finetuning.scripts.launch_benchmark \
-  --adapter cmndcntrlcyber/qwen14b-code-trainer-v6-aggressive --wait
+  --adapter cmndcntrlcyber/qwen14b-code-trainer-aggressive --wait
 python -m src.phase4_qwen_finetuning.scripts.launch_benchmark \
-  --adapter cmndcntrlcyber/qwen14b-code-trainer-v6-aggressive --baseline --wait
+  --adapter cmndcntrlcyber/qwen14b-code-trainer-aggressive --baseline --wait
 ```

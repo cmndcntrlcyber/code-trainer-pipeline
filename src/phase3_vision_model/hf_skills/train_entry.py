@@ -201,7 +201,7 @@ datasets:
 - {dataset_id}
 ---
 
-# Code-Trainer V6 — Phase 3 Vision Adapter
+# Code-Trainer — Phase 3 Vision Adapter
 
 LoRA adapter + MLP projector trained on `{dataset_id}@{revision}`.
 

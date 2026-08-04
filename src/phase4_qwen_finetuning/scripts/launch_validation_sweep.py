@@ -13,7 +13,7 @@ slot custom training into AutoTrain's fixed taxonomy.
 Usage:
     export HF_TOKEN=hf_...
     python -m src.phase4_qwen_finetuning.scripts.launch_validation_sweep \
-        --config src/config/v6_config.yaml --wait
+        --config src/config/config.yaml --wait
 
     # Dry-run (print 3 job specs, don't submit):
     python -m src.phase4_qwen_finetuning.scripts.launch_validation_sweep --dry-run
@@ -82,14 +82,15 @@ def build_job_spec(
         "name": cfg.name,
         "lora_r": cfg.lora_r,
         "lora_alpha": cfg.lora_alpha,
+        "lora_dropout": cfg.lora_dropout,
         "learning_rate": cfg.learning_rate,
         "batch_size": cfg.batch_size,
         "gradient_accumulation": cfg.gradient_accumulation,
         "model_id": qf_cfg.get("model", "Qwen/Qwen2.5-Coder-14B-Instruct"),
-        "dataset_id": qf_cfg.get("dataset_id", "cmndcntrlcyber/code-trainer-offsec-dataset"),
-        "dataset_revision": qf_cfg.get("dataset_revision", "main"),
-        "num_epochs": int(qf_cfg.get("num_epochs_sweep", 1)),
-        "max_seq_length": int(qf_cfg.get("max_seq_length", 2048)),
+        "dataset_id": cfg.dataset_id or qf_cfg.get("dataset_id", "cmndcntrlcyber/code-trainer-offsec-dataset"),
+        "dataset_revision": cfg.dataset_revision or qf_cfg.get("dataset_revision", "main"),
+        "num_epochs": cfg.epochs if cfg.epochs else int(qf_cfg.get("num_epochs_sweep", 1)),
+        "max_seq_length": cfg.max_seq_length if cfg.max_seq_length else int(qf_cfg.get("max_seq_length", 2048)),
         "adapter_repo": adapter_repo,
         "output_dir": f"/tmp/phase4-{config_name}",
     }
@@ -138,7 +139,7 @@ def _print_spec(name: str, spec: JobSpec):
 
 def main():
     parser = argparse.ArgumentParser(description="Phase 4A: launch A100 validation sweep (HF Jobs)")
-    parser.add_argument("--config", default="src/config/v6_config.yaml")
+    parser.add_argument("--config", default="src/config/config.yaml")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print job specs without submitting")
     parser.add_argument("--wait", action="store_true",

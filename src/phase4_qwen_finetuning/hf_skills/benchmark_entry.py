@@ -95,16 +95,21 @@ def main():
     subprocess.run(cmd, check=True)
 
     # lm_eval writes a directory of result files under output_path; locate the
-    # newest JSON it produced.
-    if out_json.is_dir():
-        candidates = sorted(out_json.rglob("results_*.json"))
-        if not candidates:
-            candidates = sorted(out_json.rglob("*.json"))
-        raw_path = candidates[-1] if candidates else None
-    else:
-        raw_path = out_json if out_json.exists() else None
+    # newest JSON it produced. Search both the output_path and its parent
+    # directory since different lm_eval versions place results differently.
+    raw_path = None
+    for search_root in [out_json, output_dir]:
+        if search_root.is_dir():
+            candidates = sorted(search_root.rglob("results_*.json"))
+            if not candidates:
+                candidates = sorted(search_root.rglob("*.json"))
+            if candidates:
+                raw_path = candidates[-1]
+                break
+    if raw_path is None and out_json.is_file():
+        raw_path = out_json
     if raw_path is None:
-        raise RuntimeError(f"Could not find lm_eval output under {out_json}")
+        raise RuntimeError(f"Could not find lm_eval output under {out_json} or {output_dir}")
     raw = json.loads(raw_path.read_text())
 
     # Compact summary payload (rubric-friendly), keeping the full lm_eval output

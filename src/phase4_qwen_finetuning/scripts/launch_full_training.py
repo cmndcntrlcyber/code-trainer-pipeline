@@ -9,7 +9,7 @@ adapters stay intact.
 Usage:
     set -a && source .env && set +a
     python -m src.phase4_qwen_finetuning.scripts.launch_full_training \\
-        --config src/config/v6_config.yaml \\
+        --config src/config/config.yaml \\
         --best-config standard --wait
 
     # Top-2 (read from docs/sweep/phase4a-summary.json):
@@ -83,14 +83,15 @@ def build_job_spec(
         "name": cfg.name,
         "lora_r": cfg.lora_r,
         "lora_alpha": cfg.lora_alpha,
+        "lora_dropout": cfg.lora_dropout,
         "learning_rate": cfg.learning_rate,
         "batch_size": cfg.batch_size,
         "gradient_accumulation": cfg.gradient_accumulation,
         "model_id": qf_cfg.get("model", "Qwen/Qwen2.5-Coder-14B-Instruct"),
-        "dataset_id": qf_cfg.get("dataset_id", "cmndcntrlcyber/code-trainer-offsec-dataset"),
-        "dataset_revision": qf_cfg.get("dataset_revision", "main"),
+        "dataset_id": cfg.dataset_id or qf_cfg.get("dataset_id", "cmndcntrlcyber/code-trainer-offsec-dataset"),
+        "dataset_revision": cfg.dataset_revision or qf_cfg.get("dataset_revision", "main"),
         "num_epochs": num_epochs,
-        "max_seq_length": int(qf_cfg.get("max_seq_length", 2048)),
+        "max_seq_length": cfg.max_seq_length if cfg.max_seq_length else int(qf_cfg.get("max_seq_length", 2048)),
         "adapter_repo": adapter_repo,
         "output_dir": f"/tmp/phase4b-{config_name}",
     }
@@ -162,7 +163,7 @@ def _resolve_top_n(top_n: int) -> list[str]:
 
 def main():
     parser = argparse.ArgumentParser(description="Phase 4B: full training (HF Jobs)")
-    parser.add_argument("--config", default="src/config/v6_config.yaml")
+    parser.add_argument("--config", default="src/config/config.yaml")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--wait", action="store_true")
     grp = parser.add_mutually_exclusive_group(required=True)

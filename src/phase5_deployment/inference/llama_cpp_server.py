@@ -32,7 +32,7 @@ class LlamaCppServer:
         llama_cpp_dir: str | Path,
         port: int = 8080,
         n_gpu_layers: int = -1,     # -1 = all layers on GPU
-        ctx_size: int = 4096,
+        ctx_size: int = 8192,
         n_parallel: int = 1,
     ):
         self.gguf_path = Path(gguf_path)

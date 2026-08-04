@@ -1,14 +1,14 @@
 # Phase 4A — Validation Sweep Summary
 
-**Adapter base:** `cmndcntrlcyber/qwen14b-code-trainer-v6-{conservative,standard,aggressive}`
+**Adapter base:** `cmndcntrlcyber/qwen14b-code-trainer-{conservative,standard,aggressive}`
 
 ## Ranking by eval_loss
 
 | Rank | Config | LoRA r/α | LR | bs × accum | Stage | eval_loss | Adapter |
 |---:|---|---|---|---|---|---|---|
-| 1 | `aggressive` | 64/128 | 3e-04 | 4 × 4 | ERROR | 0.4724 | [link](https://hf.co/cmndcntrlcyber/qwen14b-code-trainer-v6-aggressive) |
-| 2 | `standard` | 32/64 | 2e-04 | 2 × 8 | ERROR | 0.4798 | [link](https://hf.co/cmndcntrlcyber/qwen14b-code-trainer-v6-standard) |
-| 3 | `conservative` | 16/32 | 1e-04 | 1 × 16 | ERROR | 0.4819 | [link](https://hf.co/cmndcntrlcyber/qwen14b-code-trainer-v6-conservative) |
+| 1 | `aggressive` | 64/128 | 3e-04 | 4 × 4 | ERROR | 0.4724 | [link](https://hf.co/cmndcntrlcyber/qwen14b-code-trainer-aggressive) |
+| 2 | `standard` | 32/64 | 2e-04 | 2 × 8 | ERROR | 0.4798 | [link](https://hf.co/cmndcntrlcyber/qwen14b-code-trainer-standard) |
+| 3 | `conservative` | 16/32 | 1e-04 | 1 × 16 | ERROR | 0.4819 | [link](https://hf.co/cmndcntrlcyber/qwen14b-code-trainer-conservative) |
 
 ## Best config: `aggressive` (eval_loss = 0.4724)
 
@@ -16,7 +16,7 @@ Recommended next step — Phase 4B full training (3 epochs) on the best config:
 
 ```bash
 python -m src.phase4_qwen_finetuning.scripts.launch_full_training \
-  --config src/config/v6_config.yaml \
+  --config src/config/config.yaml \
   --best-config aggressive --wait
 ```
 

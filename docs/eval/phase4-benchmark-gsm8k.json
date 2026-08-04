@@ -1,6 +1,6 @@
 {
   "model": "Qwen/Qwen2.5-Coder-14B-Instruct",
-  "adapter": "cmndcntrlcyber/qwen14b-code-trainer-v6-aggressive",
+  "adapter": "cmndcntrlcyber/qwen14b-code-trainer-aggressive",
   "task": "gsm8k",
   "num_fewshot": 0,
   "batch_size": 16,
@@ -12,5 +12,5 @@
     "exact_match_stderr,flexible-extract": 0.012872435481188778
   },
   "lm_eval_version": null,
-  "raw_path": "/tmp/phase4-benchmark/lm_eval_raw.json/cmndcntrlcyber__qwen14b-code-trainer-v6-aggressive/results_2026-05-06T06-15-23.882517.json"
+  "raw_path": "/tmp/phase4-benchmark/lm_eval_raw.json/cmndcntrlcyber__qwen14b-code-trainer-aggressive/results_2026-05-06T06-15-23.882517.json"
 }

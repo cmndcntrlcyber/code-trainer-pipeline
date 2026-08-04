@@ -148,7 +148,7 @@ tags:
 - qwen2.5-coder
 ---
 
-# Code-Trainer V6 — Phase 5 GGUF
+# Code-Trainer — Phase 5 GGUF
 
 LoRA adapter from [{adapter_repo}](https://hf.co/{adapter_repo}) merged into
 {base_model} and quantized via llama.cpp. Use with `llama-cli`, `llama-server`,
@@ -161,7 +161,7 @@ Ollama, LM Studio, vLLM (experimental GGUF), or text-generation-webui.
 ## Quick start (llama-server)
 
 ```bash
-llama-server -m <file>.gguf --host 0.0.0.0 --port 8080 --ctx-size 4096
+llama-server -m <file>.gguf --host 0.0.0.0 --port 8080 --ctx-size 8192
 ```
 
 See `src/phase6_inference/server/vllm_serve.sh` for the full vLLM serving

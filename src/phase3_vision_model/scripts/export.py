@@ -8,7 +8,7 @@ Export the fine-tuned Phase 3 model:
 
 Usage:
     python -m src.phase3_vision_model.scripts.export \
-        --config src/config/v6_config.yaml \
+        --config src/config/config.yaml \
         --checkpoint models/vision_model/best \
         --output-dir models/vision_model_merged \
         --push-to-hub
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     parser = argparse.ArgumentParser(description="Phase 3: Export merged model")
-    parser.add_argument("--config", default="src/config/v6_config.yaml")
+    parser.add_argument("--config", default="src/config/config.yaml")
     parser.add_argument("--checkpoint", default="models/vision_model/best")
     parser.add_argument("--output-dir", default="models/vision_model_merged")
     parser.add_argument("--push-to-hub", action="store_true")
@@ -61,7 +61,7 @@ def main():
 
     if args.push_to_hub:
         hf_username = config.get("preprocessing", {}).get("dataset_name", "").split("/")[0]
-        repo_id = f"{hf_username}/code-vision-model-v6"
+        repo_id = f"{hf_username}/code-vision-model"
         logger.info(f"Pushing to Hub: {repo_id}")
         merged_decoder.push_to_hub(repo_id, commit_message="Phase 3: Vision model merged")
         model.tokenizer.push_to_hub(repo_id)

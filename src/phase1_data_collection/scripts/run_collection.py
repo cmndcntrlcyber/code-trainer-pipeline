@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Code-Trainer V6 Data Collection")
-    parser.add_argument("--config", required=True, help="Path to v6_config.yaml")
+    parser = argparse.ArgumentParser(description="Code-Trainer Data Collection")
+    parser.add_argument("--config", required=True, help="Path to config.yaml")
     parser.add_argument("--repos-per-language", type=int, default=None,
                         help="Override repos per language (default: from config)")
     parser.add_argument("--skip-scraping", action="store_true",

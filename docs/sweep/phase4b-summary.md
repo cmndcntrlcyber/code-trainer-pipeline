@@ -1,6 +1,6 @@
 # Phase 4B — Full Training Summary
 
-**Adapter:** [cmndcntrlcyber/qwen14b-code-trainer-v6-aggressive-full3](https://hf.co/cmndcntrlcyber/qwen14b-code-trainer-v6-aggressive-full3) (1.05 GB)
+**Adapter:** [cmndcntrlcyber/qwen14b-code-trainer-aggressive-full3](https://hf.co/cmndcntrlcyber/qwen14b-code-trainer-aggressive-full3) (1.05 GB)
 **Job:** [`69f8188e9d85bec4d76f1c5e`](https://huggingface.co/jobs/cmndcntrlcyber/69f8188e9d85bec4d76f1c5e) — A100-large, 4h 53m, COMPLETED
 **Generated:** 2026-05-04
 **Raw JSON:** [`phase4b-result.json`](./phase4b-result.json)
@@ -47,7 +47,7 @@ confirmed: 3 passes over 8k samples produced a measurably weaker adapter than 1 
 over the full 26k.
 
 **Decision: Phase 5 uses Phase 4A's `aggressive` adapter** at
-[`cmndcntrlcyber/qwen14b-code-trainer-v6-aggressive`](https://hf.co/cmndcntrlcyber/qwen14b-code-trainer-v6-aggressive),
+[`cmndcntrlcyber/qwen14b-code-trainer-aggressive`](https://hf.co/cmndcntrlcyber/qwen14b-code-trainer-aggressive),
 not `aggressive-full3`.
 
 **Lesson for any rerun:** if we want more passes through the data, slice less
@@ -70,4 +70,4 @@ while seeing more unique examples.
 
 - [x] Phase 4B trained checkpoint published (1.05 GB LoRA adapter)
 - [x] Comparable eval_loss against full val split — confirmed Phase 4A is better
-- [ ] **Phase 5 GGUF conversion uses `cmndcntrlcyber/qwen14b-code-trainer-v6-aggressive`** (Phase 4A) — merge LoRA → base, quantize to Q4_K_M
+- [ ] **Phase 5 GGUF conversion uses `cmndcntrlcyber/qwen14b-code-trainer-aggressive`** (Phase 4A) — merge LoRA → base, quantize to Q4_K_M

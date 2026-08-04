@@ -1,12 +1,12 @@
 """
 phase4_qwen_finetuning/configs/sweep_configs.py
 
-Three hyperparameter configurations for the Phase 4A validation sweep.
-Each runs for 1 epoch on A100-large (~2h each, ~$21 total).
+Hyperparameter configurations for the Phase 4 validation sweep and V7 training.
+Each runs for 1 epoch on A100-large (~2h each).
 
 Best config (lowest eval_loss) is used for Phase 4B full training.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -17,6 +17,11 @@ class SweepConfig:
     learning_rate: float
     batch_size: int
     gradient_accumulation: int
+    lora_dropout: float = 0.05
+    max_seq_length: int = 0  # 0 = use config.yaml default
+    dataset_id: str | None = None  # None = use config.yaml default
+    dataset_revision: str | None = None
+    epochs: int = 0  # 0 = use config.yaml default
     # Derived
     effective_batch: int = 0
 
@@ -48,6 +53,19 @@ SWEEP_CONFIGS = [
         learning_rate=3e-4,
         batch_size=4,
         gradient_accumulation=4,
+    ),
+    SweepConfig(
+        name="v7_mixed",
+        lora_r=32,
+        lora_alpha=64,
+        lora_dropout=0.05,
+        learning_rate=1.5e-4,
+        batch_size=2,
+        gradient_accumulation=8,
+        max_seq_length=8192,
+        dataset_id="cmndcntrlcyber/code-trainer-v7-mixed",
+        dataset_revision="main",
+        epochs=1,
     ),
 ]
 

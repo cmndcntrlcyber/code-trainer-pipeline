@@ -5,16 +5,16 @@ Upload the locally-built HuggingFace dataset to HF Hub.
 
 Usage:
     python -m src.phase2_preprocessing.scripts.upload_to_hub \
-        --config src/config/v6_config.yaml \
+        --config src/config/config.yaml \
         --dataset-dir data/hf_dataset
 
     # Upload as public repo:
     python -m src.phase2_preprocessing.scripts.upload_to_hub \
-        --config src/config/v6_config.yaml --public
+        --config src/config/config.yaml --public
 
     # Upload multimodal build to a named branch/revision:
     python -m src.phase2_preprocessing.scripts.upload_to_hub \
-        --config src/config/v6_config.yaml \
+        --config src/config/config.yaml \
         --dataset-dir data/hf_dataset_multimodal \
         --revision v2-multimodal --public
 """
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     parser = argparse.ArgumentParser(description="Upload Phase 2 dataset to HF Hub")
-    parser.add_argument("--config", default="src/config/v6_config.yaml")
+    parser.add_argument("--config", default="src/config/config.yaml")
     parser.add_argument("--dataset-dir", default="data/hf_dataset",
                         help="Path to the locally-saved HF dataset")
     parser.add_argument("--public", action="store_true",
@@ -87,7 +87,7 @@ def main():
     commit_message = args.commit_message or (
         f"Phase 2: multimodal build ({revision})"
         if revision
-        else "Phase 2: Upload code-trainer-v6 screenshot dataset"
+        else "Phase 2: Upload code-trainer screenshot dataset"
     )
 
     logger.info(

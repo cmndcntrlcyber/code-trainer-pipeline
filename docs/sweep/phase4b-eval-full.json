@@ -1,5 +1,5 @@
 {
-  "adapter": "cmndcntrlcyber/qwen14b-code-trainer-v6-aggressive-full3",
+  "adapter": "cmndcntrlcyber/qwen14b-code-trainer-aggressive-full3",
   "base_model": "Qwen/Qwen2.5-Coder-14B-Instruct",
   "dataset": "cmndcntrlcyber/code-trainer-offsec-dataset@main",
   "val_split": "validation",

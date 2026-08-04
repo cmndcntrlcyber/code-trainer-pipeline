@@ -9,7 +9,7 @@ and runs against the already-published adapter at PHASE3_ADAPTER_REPO.
 Usage:
     export HF_TOKEN=hf_...
     python -m src.phase3_vision_model.scripts.launch_eval \
-        --config src/config/v6_config.yaml --wait
+        --config src/config/config.yaml --wait
 
     # Dry-run (print JobSpec, don't submit):
     python -m src.phase3_vision_model.scripts.launch_eval --dry-run
@@ -61,7 +61,7 @@ def build_eval_command(repo_url: str, repo_ref: str, limit: int | None = None) -
 
 def main():
     parser = argparse.ArgumentParser(description="Launch Phase 3 A100 eval job (HF Jobs)")
-    parser.add_argument("--config", default="src/config/v6_config.yaml")
+    parser.add_argument("--config", default="src/config/config.yaml")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print the job spec without submitting")
     parser.add_argument("--wait", action="store_true",
