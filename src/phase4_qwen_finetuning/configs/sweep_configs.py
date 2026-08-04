@@ -67,6 +67,19 @@ SWEEP_CONFIGS = [
         dataset_revision="main",
         epochs=1,
     ),
+    SweepConfig(
+        name="v8_mixed",
+        lora_r=32,
+        lora_alpha=64,
+        lora_dropout=0.05,
+        learning_rate=1.0e-4,
+        batch_size=2,
+        gradient_accumulation=8,
+        max_seq_length=8192,
+        dataset_id="cmndcntrlcyber/code-trainer-v8-mixed",
+        dataset_revision="main",
+        epochs=1,
+    ),
 ]
 
 SWEEP_CONFIG_MAP = {c.name: c for c in SWEEP_CONFIGS}

@@ -92,6 +92,25 @@ v7_mixed:
   seed: 42
   private: false
 
+# V8 Mixed Dataset — fixes multilingual hallucination + tool-call format mismatch
+v8_mixed:
+  dataset_name: cmndcntrlcyber/code-trainer-v8-mixed
+  slice_a:
+    source: cmndcntrlcyber/code-trainer-offsec-dataset
+    subsample: 8000
+  slice_b:
+    source: glaiveai/glaive-function-calling-v2
+    max_rows: 12000
+  slice_c:
+    source: greghavens/fable-5-coding-and-debugging-traces
+    max_rows: 10000
+  slice_d:
+    source: teknium/OpenHermes-2.5
+    max_rows: 8000
+  val_split: 0.1
+  seed: 42
+  private: false
+
 # Phase 3: Vision Model (HF Skills A100 — cloud)
 vision_model:
   # Device profile switches between local 5060 Ti (INT4 + 8bit optim) and A100 (full BF16).
