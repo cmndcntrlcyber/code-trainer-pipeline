@@ -20,7 +20,7 @@ def build_training_args(
         from trl import SFTConfig
         return SFTConfig(
             output_dir=str(output_dir),
-            max_seq_length=max_seq_length,
+            max_length=max_seq_length,
             num_train_epochs=num_epochs,
             per_device_train_batch_size=cfg.batch_size,
             per_device_eval_batch_size=cfg.batch_size,
