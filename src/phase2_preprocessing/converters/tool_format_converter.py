@@ -102,6 +102,7 @@ def convert_fable5_messages_to_hermes(
 
         elif role == "tool":
             content = f"<tool_response>\n{content}\n</tool_response>"
+            role = "user"
 
         converted.append({"role": role, "content": content})
 

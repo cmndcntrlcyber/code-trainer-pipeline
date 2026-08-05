@@ -111,45 +111,43 @@ def load_slice_a(
 # ── Slice B: Tool calling (glaive-v2, native Qwen format) ─────────────────
 
 
+QWEN_TOOLS_TEMPLATE = """# Tools
+
+You may call one or more functions to assist with the user query.
+
+You are provided with function signatures within <tools></tools> XML tags:
+<tools>
+{tool_json_lines}
+</tools>
+
+For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
+<tool_call>
+{{"name": <function-name>, "arguments": <args-json-object>}}
+</tool_call>"""
+
+
 def parse_glaive_system(system_text: str) -> tuple[str, list[dict]]:
-    """Parse glaive-v2 system field into (system_prompt, tool_defs)."""
+    """Parse glaive-v2 system field into (base_prompt, tool_defs)."""
     system_text = system_text.replace("SYSTEM: ", "", 1).strip()
 
     tools = []
-    json_blocks = re.findall(r'\{[^{}]*"name"[^{}]*"parameters"[^{}]*\{[^}]*\}[^}]*\}', system_text, re.DOTALL)
-
-    if not json_blocks:
-        json_start = system_text.find("{")
-        if json_start >= 0:
-            rest = system_text[json_start:]
-            for block in rest.split("\n{"):
-                block = block.strip()
-                if not block.startswith("{"):
-                    block = "{" + block
+    depth = 0
+    start = None
+    for ci, ch in enumerate(system_text):
+        if ch == "{":
+            if depth == 0:
+                start = ci
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start is not None:
                 try:
-                    tool_def = json.loads(block)
-                    if "name" in tool_def:
-                        tools.append({"type": "function", "function": tool_def})
+                    obj = json.loads(system_text[start : ci + 1])
+                    if "name" in obj and "parameters" in obj:
+                        tools.append({"type": "function", "function": obj})
                 except json.JSONDecodeError:
                     pass
-
-    if not tools:
-        try:
-            start = system_text.index("{")
-            end = system_text.rindex("}") + 1
-            raw = system_text[start:end]
-            for candidate in [raw, f"[{raw}]"]:
-                try:
-                    parsed = json.loads(candidate)
-                    if isinstance(parsed, dict) and "name" in parsed:
-                        tools = [{"type": "function", "function": parsed}]
-                    elif isinstance(parsed, list):
-                        tools = [{"type": "function", "function": t} for t in parsed if isinstance(t, dict) and "name" in t]
-                    break
-                except json.JSONDecodeError:
-                    continue
-        except ValueError:
-            pass
+                start = None
 
     base_prompt = system_text
     if tools:
@@ -160,10 +158,19 @@ def parse_glaive_system(system_text: str) -> tuple[str, list[dict]]:
     return base_prompt, tools
 
 
+def build_qwen_system_with_tools(base_prompt: str, tools: list[dict]) -> str:
+    """Build a system prompt with tools in Qwen2.5's native format."""
+    tool_lines = "\n".join(json.dumps(t) for t in tools)
+    tools_block = QWEN_TOOLS_TEMPLATE.format(tool_json_lines=tool_lines)
+    if base_prompt:
+        return f"{base_prompt}\n\n{tools_block}"
+    return tools_block
+
+
 def parse_glaive_chat(chat_text: str) -> list[dict]:
-    """Parse glaive-v2 chat field into messages list."""
+    """Parse glaive-v2 chat field into Qwen2.5 native tool-call format."""
     messages = []
-    parts = re.split(r'\n(?=USER:|FUNCTION RESPONSE:|ASSISTANT:)', chat_text.strip())
+    parts = re.split(r"\n(?=USER:|FUNCTION RESPONSE:|ASSISTANT:)", chat_text.strip())
 
     for part in parts:
         part = part.strip()
@@ -179,31 +186,39 @@ def parse_glaive_chat(chat_text: str) -> list[dict]:
             content = part[10:].strip().replace("<|endoftext|>", "").strip()
             if not content:
                 continue
-            fc_match = re.search(r'<functioncall>\s*(\{.*\})', content, re.DOTALL)
+            fc_match = re.search(r"<functioncall>\s*(\{.*\})", content, re.DOTALL)
             if fc_match:
+                raw = fc_match.group(1)
+                raw = re.sub(r"'(\{.*?\})'", lambda m: '"' + m.group(1).replace('"', '\\"') + '"', raw)
                 try:
-                    call = json.loads(fc_match.group(1))
-                    name = call.get("name", "")
-                    args_raw = call.get("arguments", {})
-                    if isinstance(args_raw, str):
-                        try:
-                            args_raw = json.loads(args_raw)
-                        except json.JSONDecodeError:
-                            args_raw = {}
-                    tool_call = {"name": name, "arguments": args_raw}
-                    tc_content = json.dumps(tool_call)
-                    messages.append({
-                        "role": "assistant",
-                        "content": f"<tool_call>\n{tc_content}\n</tool_call>",
-                    })
+                    call = json.loads(raw)
                 except json.JSONDecodeError:
-                    messages.append({"role": "assistant", "content": content})
+                    try:
+                        call = json.loads(raw.replace("'", '"'))
+                    except json.JSONDecodeError:
+                        messages.append({"role": "assistant", "content": content})
+                        continue
+                name = call.get("name", "")
+                args_raw = call.get("arguments", {})
+                if isinstance(args_raw, str):
+                    try:
+                        args_raw = json.loads(args_raw)
+                    except json.JSONDecodeError:
+                        args_raw = {}
+                tool_call = {"name": name, "arguments": args_raw}
+                messages.append({
+                    "role": "assistant",
+                    "content": f"<tool_call>\n{json.dumps(tool_call)}\n</tool_call>",
+                })
             else:
                 messages.append({"role": "assistant", "content": content})
 
         elif part.startswith("FUNCTION RESPONSE:"):
-            content = part[len("FUNCTION RESPONSE:"):].strip()
-            messages.append({"role": "tool", "content": content})
+            content = part[len("FUNCTION RESPONSE:") :].strip()
+            messages.append({
+                "role": "user",
+                "content": f"<tool_response>\n{content}\n</tool_response>",
+            })
 
     return messages
 
@@ -237,13 +252,18 @@ def load_slice_b(
         system_text = row.get("system", "")
         base_prompt, tools = parse_glaive_system(system_text)
 
+        if not tools:
+            skipped_parse += 1
+            continue
+
         messages = parse_glaive_chat(chat)
         if not messages:
             skipped_parse += 1
             continue
 
-        if base_prompt and not any(m["role"] == "system" for m in messages):
-            messages.insert(0, {"role": "system", "content": base_prompt})
+        system_content = build_qwen_system_with_tools(base_prompt, tools)
+        if not any(m["role"] == "system" for m in messages):
+            messages.insert(0, {"role": "system", "content": system_content})
 
         clean_messages = []
         for m in messages:
