@@ -214,7 +214,7 @@ qwen_finetuning:
     hardware: "a100-large"
     wandb_project: "rtpi-phase4-qwen14b"
     adapter_base: ${HF_USERNAME}/qwen14b-code-trainer
-    timeout_seconds: 36000        # 10h ceiling — V7 (8192 seq) needs ~8h
+    timeout_seconds: 50400        # 14h ceiling — V8 (4096 seq, 38K rows) needs ~12h
     poll_interval: 60
     image: "huggingface/transformers-pytorch-gpu:latest"
     repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
