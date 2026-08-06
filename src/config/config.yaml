@@ -240,9 +240,9 @@ deployment:
   port: 8080
   gguf_repo: ${HF_USERNAME}/qwen14b-code-trainer-gguf
 
-  # Source adapter for Phase 5 conversion. V7 mixed dataset corrective action
-  # (eval_loss 0.3592, restores tool-calling + agent capabilities).
-  source_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v7_mixed
+  # Source adapter for Phase 5 conversion. V8 mixed dataset with native Qwen2.5
+  # tool-call format (eval_loss 0.4837, fixes multilingual hallucination).
+  source_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v8_mixed
   base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
 
   # HF Jobs cloud-job settings — same shape as vision_model.cloud
