@@ -28,5 +28,7 @@ data/outputs/*
 !data/inputs/.gitignore
 !data/outputs/.gitignore
 
-# V7 mixed dataset (lives on HuggingFace Hub, not GitHub)
+# Mixed datasets (live on HuggingFace Hub, not GitHub)
 data/v7_mixed/
+data/v8_mixed/
+data/v9_mixed/

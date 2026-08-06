@@ -111,6 +111,27 @@ v8_mixed:
   seed: 42
   private: false
 
+# V9 Mixed Dataset — fixes tool_call tag emission, adds curriculum training
+v9_mixed:
+  dataset_name: cmndcntrlcyber/code-trainer-v9-mixed
+  slice_a:
+    source: cmndcntrlcyber/code-trainer-offsec-dataset
+    subsample: 8000
+  slice_b:
+    source: glaiveai/glaive-function-calling-v2
+    max_rows: 19000
+  slice_b_multi:
+    synthetic_count: 2000
+  slice_c:
+    source: greghavens/fable-5-coding-and-debugging-traces
+    max_rows: 10000
+  slice_d:
+    source: teknium/OpenHermes-2.5
+    max_rows: 8000
+  val_split: 0.1
+  seed: 42
+  private: false
+
 # Phase 3: Vision Model (HF Skills A100 — cloud)
 vision_model:
   # Device profile switches between local 5060 Ti (INT4 + 8bit optim) and A100 (full BF16).
@@ -235,7 +256,7 @@ qwen_finetuning:
 # src/phase6_inference/. The local converter scripts under gguf/ are kept
 # for offline conversion when needed.
 deployment:
-  quantization: "Q4_K_M"
+  quantization: "Q5_K_M"
   context_length: 8192
   port: 8080
   gguf_repo: ${HF_USERNAME}/qwen14b-code-trainer-gguf
@@ -254,12 +275,11 @@ deployment:
     image: "huggingface/transformers-pytorch-gpu:latest"
     repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
     repo_ref: "main"
-    # Quantization levels to produce + upload. Q4_K_M is the architecture-doc
-    # recommendation for the coder hot-swap target. Q5_K_M added for V7 to
-    # improve structured output reliability.
+    # Quantization levels to produce + upload. Q5_K_M is the V9 default for
+    # improved tool_call tag fidelity. Q4_K_M kept as fallback.
     quants:
-      - "Q4_K_M"
       - "Q5_K_M"
+      - "Q4_K_M"
 
 # Phase 5b: Abliteration Benchmarking
 # Runs the merged LoRA+base model through 3 abliteration techniques and

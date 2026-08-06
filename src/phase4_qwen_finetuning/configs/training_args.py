@@ -15,7 +15,15 @@ def build_training_args(
     num_epochs: int = 1,
     max_seq_length: int = 2048,
     wandb_project: str = "code-trainer-phase4",
+    dataset_text_field: str | None = None,
+    packing: bool | None = None,
 ):
+    sft_kwargs = {}
+    if dataset_text_field is not None:
+        sft_kwargs["dataset_text_field"] = dataset_text_field
+    if packing is not None:
+        sft_kwargs["packing"] = packing
+
     try:
         from trl import SFTConfig
         return SFTConfig(
@@ -47,6 +55,7 @@ def build_training_args(
             dataloader_num_workers=4,
             dataloader_pin_memory=True,
             remove_unused_columns=False,
+            **sft_kwargs,
         )
     except ImportError:
         from transformers import TrainingArguments

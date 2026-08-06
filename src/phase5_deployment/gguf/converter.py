@@ -132,7 +132,7 @@ print("Merge complete:", "{merged_dir}")
         logger.info(f"GGUF F16 saved: {gguf_f16} ({gguf_f16.stat().st_size / 1e9:.1f} GB)")
         return gguf_f16
 
-    def quantize(self, gguf_f16: Path, quant_type: str = "Q4_K_M") -> Path:
+    def quantize(self, gguf_f16: Path, quant_type: str = "Q5_K_M") -> Path:
         """Quantize GGUF F16 to target quantization."""
         quantize_bin = self.llama_cpp_dir / "llama-quantize"
         output = self.work_dir / f"model_{quant_type.lower()}.gguf"
@@ -151,11 +151,11 @@ print("Merge complete:", "{merged_dir}")
         self,
         adapter_repo_id: str,
         base_model_id: str = "Qwen/Qwen2.5-Coder-14B-Instruct",
-        quant_type: str = "Q4_K_M",
+        quant_type: str = "Q5_K_M",
         output_path: Path | None = None,
     ) -> Path:
         """
-        Run the complete LoRA → GGUF → Q4_K_M pipeline.
+        Run the complete LoRA → GGUF pipeline.
 
         Returns:
             Path to the final quantized GGUF file

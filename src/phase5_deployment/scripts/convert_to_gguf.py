@@ -36,8 +36,8 @@ def main():
                         help="HF Hub repo ID of the fine-tuned LoRA adapter")
     parser.add_argument("--llama-cpp", required=True,
                         help="Path to compiled llama.cpp directory")
-    parser.add_argument("--quant", default="Q4_K_M",
-                        help="Quantization type (Q4_K_M, Q5_K_M, Q8_0)")
+    parser.add_argument("--quant", default="Q5_K_M",
+                        help="Quantization type (Q5_K_M, Q4_K_M, Q8_0)")
     parser.add_argument("--output-dir", default="models/gguf")
     parser.add_argument("--push-to-hub", action="store_true")
     args = parser.parse_args()

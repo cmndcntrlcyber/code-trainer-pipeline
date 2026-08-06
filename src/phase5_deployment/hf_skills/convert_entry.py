@@ -174,7 +174,7 @@ def main():
     base_model = params.get("base_model", "Qwen/Qwen2.5-Coder-14B-Instruct")
     adapter_repo = params.get("adapter_repo")
     gguf_repo = params.get("gguf_repo") or os.environ.get("PHASE5_GGUF_REPO")
-    quants = params.get("quants") or ["Q4_K_M"]
+    quants = params.get("quants") or ["Q5_K_M"]
 
     if not adapter_repo:
         raise RuntimeError("adapter_repo required (set PHASE5_PARAMS_JSON)")
