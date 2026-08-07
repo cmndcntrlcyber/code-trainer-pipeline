@@ -36,23 +36,7 @@ logger = logging.getLogger(__name__)
 
 os.environ.setdefault("HF_HOME", "/workspace/.hf-cache")
 
-NEXUS_TOOLS = [
-    # Core file/shell tools
-    {"type": "function", "function": {"name": "Read", "description": "Read a UTF-8 file from the filesystem", "parameters": {"type": "object", "properties": {"file_path": {"type": "string", "description": "Absolute path to the file"}}, "required": ["file_path"]}}},
-    {"type": "function", "function": {"name": "Write", "description": "Create or overwrite a file with the given content", "parameters": {"type": "object", "properties": {"file_path": {"type": "string", "description": "Absolute path to the file"}, "content": {"type": "string", "description": "Content to write"}}, "required": ["file_path", "content"]}}},
-    {"type": "function", "function": {"name": "Edit", "description": "Replace an exact string in a file with new content", "parameters": {"type": "object", "properties": {"file_path": {"type": "string", "description": "Path to the file"}, "old_string": {"type": "string", "description": "Exact text to find and replace"}, "new_string": {"type": "string", "description": "Replacement text"}}, "required": ["file_path", "old_string", "new_string"]}}},
-    {"type": "function", "function": {"name": "LS", "description": "List files and directories at the given path", "parameters": {"type": "object", "properties": {"path": {"type": "string", "description": "Directory path to list"}}, "required": ["path"]}}},
-    {"type": "function", "function": {"name": "Bash", "description": "Execute a shell command and return its output", "parameters": {"type": "object", "properties": {"command": {"type": "string", "description": "The shell command to run"}, "timeout": {"type": "integer", "description": "Timeout in milliseconds"}}, "required": ["command"]}}},
-    {"type": "function", "function": {"name": "Grep", "description": "Search for a regex pattern across files", "parameters": {"type": "object", "properties": {"pattern": {"type": "string", "description": "Regex pattern to search for"}, "path": {"type": "string", "description": "Directory or file to search in"}}, "required": ["pattern"]}}},
-    {"type": "function", "function": {"name": "Glob", "description": "Find files matching a glob pattern", "parameters": {"type": "object", "properties": {"pattern": {"type": "string", "description": "Glob pattern like **/*.py"}}, "required": ["pattern"]}}},
-    {"type": "function", "function": {"name": "WebFetch", "description": "Fetch content from a URL", "parameters": {"type": "object", "properties": {"url": {"type": "string", "description": "URL to fetch"}}, "required": ["url"]}}},
-    # Session/meta tools
-    {"type": "function", "function": {"name": "TodoWrite", "description": "Read or replace the session todo list for tracking multi-step tasks", "parameters": {"type": "object", "properties": {"todos": {"type": "array", "description": "List of todo items with content and status", "items": {"type": "object", "properties": {"content": {"type": "string"}, "status": {"type": "string", "enum": ["pending", "in_progress", "completed"]}}, "required": ["content", "status"]}}}, "required": ["todos"]}}},
-    {"type": "function", "function": {"name": "Skill", "description": "Invoke a named skill by loading its instructions into the conversation", "parameters": {"type": "object", "properties": {"name": {"type": "string", "description": "Name of the skill to invoke (e.g. nmap-scan, code-review, semgrep-scan)"}}, "required": ["name"]}}},
-    {"type": "function", "function": {"name": "Task", "description": "Delegate a task to a named subagent profile (e.g. recon, exploiter, reporter, web-hunter)", "parameters": {"type": "object", "properties": {"agent": {"type": "string", "description": "Subagent profile name"}, "prompt": {"type": "string", "description": "Task description for the subagent"}}, "required": ["agent", "prompt"]}}},
-    # Scope tools
-    {"type": "function", "function": {"name": "ScopeCheck", "description": "Check if a target host or IP is within the authorized engagement scope", "parameters": {"type": "object", "properties": {"target": {"type": "string", "description": "Hostname, IP, or CIDR to check"}}, "required": ["target"]}}},
-]
+from src.phase4_qwen_finetuning.hf_skills.nexus_tools import NEXUS_TOOLS_V10 as NEXUS_TOOLS
 
 SKILLS_INDEX = (
     "Invoke a relevant skill with the `Skill` tool to load its instructions:\n"
