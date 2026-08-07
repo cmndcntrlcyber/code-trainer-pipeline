@@ -75,11 +75,13 @@ def build_benchmark_command(repo_url: str, repo_ref: str) -> list[str]:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="V7 validation suite")
+    parser = argparse.ArgumentParser(description="V7/V10 validation suite")
     parser.add_argument("--config", default="src/config/config.yaml")
-    parser.add_argument("--adapter", required=True, help="V7 adapter repo on Hub")
+    parser.add_argument("--adapter", required=True, help="Adapter repo on Hub")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--wait", action="store_true")
+    parser.add_argument("--v10", action="store_true",
+                        help="Use V10 eval scripts (nexus-aligned with skills/subagents/scope)")
     parser.add_argument("--skip-eval-loss", action="store_true")
     parser.add_argument("--skip-tool-call", action="store_true")
     parser.add_argument("--skip-agent", action="store_true")
@@ -136,22 +138,33 @@ def main():
             labels={"phase": "4-v7-val", "check": "eval_loss"},
         )
 
+    tool_entry = "src.phase4_qwen_finetuning.hf_skills.tool_call_eval_entry"
+    agent_entry = "src.phase4_qwen_finetuning.hf_skills.agent_eval_entry"
+    tool_result_file = "phase4-tool-call-eval.json"
+    agent_result_file = "phase4-agent-eval.json"
+    phase_label = "4-v7-val"
+    if args.v10:
+        tool_entry += "_v10"
+        agent_entry += "_v10"
+        tool_result_file = "phase4-tool-call-eval-v10.json"
+        agent_result_file = "phase4-agent-eval-v10.json"
+        phase_label = "4-v10-val"
+
     if not args.skip_tool_call:
         tool_params = {
             "model_id": model_id,
             "adapter_repo": args.adapter,
             "upload_repo": args.adapter,
-            "result_filename": "phase4-tool-call-eval.json",
+            "result_filename": tool_result_file,
         }
         jobs["tool_calling"] = JobSpec(
             image=cloud_cfg.get("image", "huggingface/transformers-pytorch-gpu:latest"),
-            command=build_command(repo_url, repo_ref,
-                                  "src.phase4_qwen_finetuning.hf_skills.tool_call_eval_entry"),
+            command=build_command(repo_url, repo_ref, tool_entry),
             flavor=cloud_cfg.get("hardware", "a100-large"),
             env={**base_env, "PHASE4_TOOL_EVAL_PARAMS_JSON": json.dumps(tool_params)},
             secrets=base_secrets,
             timeout_seconds=int(cloud_cfg.get("timeout_seconds", 14400)),
-            labels={"phase": "4-v7-val", "check": "tool_calling"},
+            labels={"phase": phase_label, "check": "tool_calling"},
         )
 
     if not args.skip_agent:
@@ -159,17 +172,16 @@ def main():
             "model_id": model_id,
             "adapter_repo": args.adapter,
             "upload_repo": args.adapter,
-            "result_filename": "phase4-agent-eval.json",
+            "result_filename": agent_result_file,
         }
         jobs["agent"] = JobSpec(
             image=cloud_cfg.get("image", "huggingface/transformers-pytorch-gpu:latest"),
-            command=build_command(repo_url, repo_ref,
-                                  "src.phase4_qwen_finetuning.hf_skills.agent_eval_entry"),
+            command=build_command(repo_url, repo_ref, agent_entry),
             flavor=cloud_cfg.get("hardware", "a100-large"),
             env={**base_env, "PHASE4_AGENT_EVAL_PARAMS_JSON": json.dumps(agent_params)},
             secrets=base_secrets,
             timeout_seconds=int(cloud_cfg.get("timeout_seconds", 14400)),
-            labels={"phase": "4-v7-val", "check": "agent"},
+            labels={"phase": phase_label, "check": "agent"},
         )
 
     if not args.skip_gsm8k:
