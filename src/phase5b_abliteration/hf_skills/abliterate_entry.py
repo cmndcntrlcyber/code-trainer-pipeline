@@ -1,15 +1,20 @@
 """
 phase5b_abliteration/hf_skills/abliterate_entry.py
 
-Container-side: merge base+LoRA, run 3 abliteration techniques, benchmark
-all 3 + control, convert to GGUF, upload everything to Hub.
+Container-side: merge base+LoRA (or download base directly when no adapter),
+run 3 abliteration techniques, benchmark all 3 + control, convert to GGUF,
+upload everything to Hub.
+
+Supports both post-fine-tuning (adapter_repo set) and pre-fine-tuning baseline
+(adapter_repo null/absent) abliteration runs.
 
 Runs on a100-large for GPU (activation caching) + RAM (model merge).
 
 Required env vars:
     HF_TOKEN                  — read base + adapter, write output repos
-    PHASE5B_PARAMS_JSON       — { base_model, adapter_repo, output_base,
-                                  techniques[], evaluation{}, quants[] }
+    PHASE5B_PARAMS_JSON       — { base_model, adapter_repo (or null),
+                                  output_base, techniques[], evaluation{},
+                                  quants[] }
 """
 import gc
 import json
@@ -111,6 +116,27 @@ def _merge_adapter(base_model: str, adapter_repo: str, token: str, out_dir: Path
     gc.collect()
 
 
+def _download_base_model(base_model: str, token: str, out_dir: Path):
+    """Download a base model directly (no adapter merge) for baseline abliteration."""
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    logger.info("Downloading base model %s in float16 on CPU (no adapter)", base_model)
+    model = AutoModelForCausalLM.from_pretrained(
+        base_model, dtype=torch.float16, device_map="cpu",
+        low_cpu_mem_usage=True, token=token,
+    )
+    tokenizer = AutoTokenizer.from_pretrained(base_model, token=token)
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    model.save_pretrained(str(out_dir), safe_serialization=True)
+    tokenizer.save_pretrained(str(out_dir))
+
+    del model
+    gc.collect()
+    logger.info("Base model saved to %s", out_dir)
+
+
 def _convert_to_gguf(merged_dir: Path, out_path: Path, quant: str):
     convert_script = LLAMA_DIR / "convert_hf_to_gguf.py"
     f16_path = WORK / "temp_f16.gguf"
@@ -153,8 +179,6 @@ def main():
     eval_cfg = params.get("evaluation", {})
     quants = params.get("quants", ["Q4_K_M"])
 
-    if not adapter_repo:
-        raise RuntimeError("adapter_repo required")
     if not output_base:
         raise RuntimeError("output_base required")
 
@@ -167,7 +191,7 @@ def main():
     logger.info("=" * 60)
     logger.info("PHASE 5b — Abliteration Benchmarking (HF Jobs)")
     logger.info(f"  base:       {base_model}")
-    logger.info(f"  adapter:    {adapter_repo}")
+    logger.info(f"  adapter:    {adapter_repo or '(none — baseline run)'}")
     logger.info(f"  output:     {output_base}")
     logger.info(f"  techniques: {[t.get('name') for t in techniques_cfg]}")
     logger.info(f"  quants:     {quants}")
@@ -176,10 +200,13 @@ def main():
     _install_dependencies()
     _ensure_llama_cpp()
 
-    # 1. Merge LoRA → HF weights
+    # 1. Merge LoRA → HF weights (or download base directly for baseline runs)
     merged_dir = WORK / "merged"
     if not merged_dir.exists():
-        _merge_adapter(base_model, adapter_repo, token, merged_dir)
+        if adapter_repo and str(adapter_repo).lower() != "null":
+            _merge_adapter(base_model, adapter_repo, token, merged_dir)
+        else:
+            _download_base_model(base_model, token, merged_dir)
     else:
         logger.info("Merged model already exists at %s", merged_dir)
 

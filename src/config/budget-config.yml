@@ -1,0 +1,324 @@
+# Budget Config — All Phases for $15-18 (Qwen-only)
+# Hardware: HF Jobs A100-large @ $3.20/hr → 4.7-5.6h total compute
+#
+# Cost breakdown:
+#   Phase 3b DAPT:       ~47min  →  $2.50
+#   Phase 4  SFT:        ~2h    →  $6.40
+#   Phase 4c GRPO:       ~1h    →  $3.20
+#   Phase 4c DPO:        ~30min →  $1.60
+#   Phase 5  GGUF:       ~30min →  $1.60
+#   Phase 5b Abliterate: ~30min →  $1.60
+#   ─────────────────────────────────────
+#   TOTAL:               ~5.3h  → ~$16.90
+#
+# Usage: pass --config src/config/budget-config.yml to any launcher script.
+# Session data: populate data/cot_rl_sessions/ before running Phase 4c.
+
+# ─── Phase 1: Data Collection (already complete, referenced for paths) ───
+
+data_collection:
+  github_token: ${GITHUB_TOKEN}
+  repos_dir: ./data/sample-data/repositories
+  captures_dir: ./data/sample-data/captures
+  catalog_db: ./data/catalog.db
+  repos_per_language: 500
+  min_quality_score: 30
+  languages:
+    - Python
+    - JavaScript
+    - TypeScript
+    - Java
+    - Go
+    - Rust
+    - C++
+    - C#
+  capture_workers: 8
+  viewport_width: 2560
+  viewport_height: 1440
+  font_size: 14
+  theme: "Default Dark+"
+
+# ─── Phase 2: Preprocessing (already complete) ───
+
+preprocessing:
+  dataset_name: cmndcntrlcyber/code-trainer-offsec-dataset
+  max_code_length: 8192
+  train_split: 0.8
+  val_split: 0.1
+  test_split: 0.1
+  private: true
+  image_max_dim: 1024
+  multimodal_revision: "v2-multimodal"
+
+v9_mixed:
+  dataset_name: cmndcntrlcyber/code-trainer-v9-mixed
+  slice_a:
+    source: cmndcntrlcyber/code-trainer-offsec-dataset
+    subsample: 8000
+  slice_b:
+    source: glaiveai/glaive-function-calling-v2
+    max_rows: 19000
+  slice_b_multi:
+    synthetic_count: 2000
+  slice_c:
+    source: greghavens/fable-5-coding-and-debugging-traces
+    max_rows: 10000
+  slice_d:
+    source: teknium/OpenHermes-2.5
+    max_rows: 8000
+  val_split: 0.1
+  seed: 42
+  private: false
+
+# ─── Phase 3b: DAPT — $2.50 (~47min) ───
+# Tiny corpus sample: 5K documents instead of full 811K files.
+# Enough to inject domain vocabulary without burning compute.
+
+dapt:
+  base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+  corpus_dirs:
+    - data/offensive-security/repositories
+  max_seq_length: 2048           # halved from 4096 — saves ~50% per step
+  lora_r: 16                     # halved from 32 — fewer trainable params
+  lora_alpha: 32
+  lora_dropout: 0.05
+  learning_rate: 5e-5
+  num_epochs: 1
+  min_lines: 10
+  max_lines: 1000
+  max_documents: 5000            # cap corpus to 5K docs (~15M tokens)
+  output_adapter: ${HF_USERNAME}/qwen14b-dapt-offsec-budget
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-phase3b-dapt"
+    timeout_seconds: 3600        # 1h hard ceiling
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+
+# ─── Phase 3: Vision Model (reference only — not in budget run) ───
+
+vision_model:
+  device_profile: "a100"
+  vision_encoder: "microsoft/swin-base-patch4-window7-224"
+  decoder: "Qwen/Qwen2.5-Coder-1.5B-Instruct"
+  dataset_id: "cmndcntrlcyber/code-trainer-offsec-dataset"
+  dataset_revision: "v2-multimodal"
+  batch_size: 8
+  gradient_accumulation: 4
+  learning_rate: 2e-4
+  num_epochs: 3
+  max_seq_length: 2048
+  compute_dtype: "bfloat16"
+  gradient_checkpointing: true
+  use_8bit_optimizer: false
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  output_dir: ./models/vision_model
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-phase3-vision"
+    adapter_repo: ${HF_USERNAME}/code-trainer-vision-adapter
+    timeout_seconds: 36000
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+
+# ─── Phase 4: Qwen SFT — $6.40 (~2h) ───
+# 8K train rows (from 40K), seq_len=2048 (from 4096), 1 epoch.
+# Historical: 8K x 3ep @ 2048 = 4h53m → 8K x 1ep @ 2048 ≈ 1.6-2h.
+
+qwen_finetuning:
+  model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+  hardware: "a100-large"
+  dataset_id: "cmndcntrlcyber/code-trainer-v9-mixed"
+  dataset_revision: "main"
+  num_epochs_sweep: 1
+  max_seq_length: 2048           # halved from 4096
+  train_limit: 8000              # cap rows (from 40,401)
+
+  validation_sweep:
+    - name: v10_budget
+      lora_r: 32
+      lora_alpha: 64
+      lora_dropout: 0.05
+      learning_rate: 1e-4
+      batch_size: 2              # doubled from 1 — faster throughput
+      gradient_accumulation: 8
+      max_seq_length: 2048
+      dataset_id: "cmndcntrlcyber/code-trainer-v9-mixed"
+      dataset_revision: "main"
+
+  full_training:
+    num_epochs: 1                # single epoch (from 3)
+    top_n_configs: 1             # single config (from 2)
+
+  output_base: ${HF_USERNAME}/qwen14b-code-trainer
+
+  v7_validation:
+    eval_loss_threshold: 0.55    # relaxed from 0.50 for budget run
+    tool_call_pass_rate: 0.75    # relaxed from 0.80
+    tool_call_scenarios: 10
+    agent_progress_threshold: 3
+    agent_scenarios: 5
+    gsm8k_threshold: 0.55       # relaxed from 0.60
+
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-phase4-qwen14b"
+    adapter_base: ${HF_USERNAME}/qwen14b-code-trainer
+    timeout_seconds: 10800       # 3h ceiling (from 14h)
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+    benchmark:
+      task: "gsm8k"
+      num_fewshot: 0
+      batch_size: 16
+      timeout_seconds: 1200      # 20min (from 40min)
+      wait_timeout_seconds: 3600
+
+# ─── Phase 4c: Chain-of-Thought RL — $4.80 (~1.5h total) ───
+# GRPO: 2 generations (from 4), 300 prompts, max_new_tokens=512
+# DPO: 500 preference pairs, max_length=2048
+
+rl_training:
+  grpo:
+    base_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10_budget
+    base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+    prompt_dataset: ${HF_USERNAME}/code-trainer-v10-grpo-prompts
+    num_generations: 2           # halved from 4 — biggest cost saver
+    learning_rate: 5e-7
+    kl_coef: 0.1
+    max_new_tokens: 512          # halved from 1024
+    max_prompts: 300             # capped (from unlimited)
+    output_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-grpo-budget
+
+  dpo:
+    base_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-grpo-budget
+    base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+    preference_dataset: ${HF_USERNAME}/code-trainer-v10-dpo-pairs
+    beta: 0.1
+    learning_rate: 1e-6
+    max_length: 2048             # halved from 4096
+    max_pairs: 500               # small focused set
+    output_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-dpo-budget
+
+  # Session data directory — populate before running Phase 4c
+  session_data_dir: data/cot_rl_sessions
+
+  v10_validation:
+    eval_loss_threshold: 0.55
+    tool_call_pass_rate: 0.80    # slightly relaxed from 0.85
+    tool_call_scenarios: 14
+    agent_progress_threshold: 4  # relaxed from 5
+    agent_scenarios: 7
+    gsm8k_threshold: 0.55
+
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-phase4c-rl"
+    timeout_seconds: 7200        # 2h ceiling (from 10h)
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+
+# ─── Phase 5: GGUF Deployment — $1.60 (~30min) ───
+# Single quant only (Q5_K_M). No Q4_K_M fallback.
+
+deployment:
+  quantization: "Q5_K_M"
+  context_length: 8192
+  port: 8080
+  gguf_repo: ${HF_USERNAME}/qwen14b-code-trainer-gguf
+  source_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-dpo-budget
+  base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+  cloud:
+    hardware: "a100-large"
+    timeout_seconds: 3600        # 1h ceiling (from 2h)
+    wait_timeout_seconds: 7200
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+    quants:
+      - "Q5_K_M"                 # single quant (removed Q4_K_M)
+
+# ─── Phase 5b: Abliteration — $1.60 (~30min) ───
+# 1 technique (nousresearch only — fastest, no Optuna).
+# 1 benchmark (gsm8k only). 100 eval samples (from 200).
+
+abliteration:
+  base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+  source_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-dpo-budget
+  output_base: ${HF_USERNAME}/qwen14b-code-trainer
+
+  techniques:
+    - name: nousresearch          # single technique (removed obliteratus + abliterix)
+      method: biprojected
+      n_samples: 256              # halved from 512
+      quantization: null
+
+  evaluation:
+    harmful_dataset: "Undi95/orthogonal-activation-steering-TOXIC"
+    harmless_dataset: "tatsu-lab/alpaca"
+    n_eval_samples: 100           # halved from 200
+    benchmark_tasks:
+      - gsm8k                     # single benchmark (removed mmlu + truthfulqa)
+    num_fewshot: 0
+    batch_size: 16
+
+  cloud:
+    hardware: "a100-large"
+    timeout_seconds: 3600         # 1h ceiling (from 6h)
+    wait_timeout_seconds: 7200
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+    quants:
+      - "Q4_K_M"
+
+# ─── Phase 4e: RLAIF (NOT in budget — placeholder for future) ───
+
+rlaif:
+  policy_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+  policy_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-dpo-budget
+  reward_model_base: "Qwen/Qwen2.5-Coder-1.5B-Instruct"
+  reward_model_output: ${HF_USERNAME}/code-trainer-reward-model
+  preference_dataset: ${HF_USERNAME}/code-trainer-rlaif-preferences
+  n_preference_pairs: 8000
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-phase4e-rlaif"
+    timeout_seconds: 14400
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+
+# ─── Phase 4f: PPO (NOT in budget — placeholder for future) ───
+
+ppo_training:
+  policy_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-dpo-budget
+  base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+  reward_model: ${HF_USERNAME}/code-trainer-reward-model
+  learning_rate: 1e-6
+  kl_target: 0.05
+  clip_range: 0.2
+  batch_size: 4
+  ppo_epochs: 2
+  output_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-ppo
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-phase4f-ppo"
+    timeout_seconds: 36000
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"

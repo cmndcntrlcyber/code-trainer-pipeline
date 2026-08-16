@@ -188,17 +188,34 @@ def _apply_ablation(
     down_proj). With biprojected method, restores the original Frobenius
     norm after projection to preserve magnitude.
     """
+    if not hasattr(model, "model") or not hasattr(model.model, "layers"):
+        raise RuntimeError(
+            f"Unsupported architecture: {type(model).__name__} — expected "
+            f"model.model.layers (LlamaForCausalLM, Qwen2ForCausalLM, "
+            f"Gemma2ForCausalLM, etc.). Found attributes: "
+            f"{[a for a in dir(model) if not a.startswith('_')][:20]}"
+        )
+
     n_layers = len(model.model.layers)
 
     for layer_idx in range(1, n_layers):
         layer = model.model.layers[layer_idx]
         r_hat = refusal_dirs[layer_idx + 1].to(layer.self_attn.o_proj.weight.device)
 
+        attn_proj = getattr(layer.self_attn, "o_proj", None)
+        mlp_proj = getattr(layer.mlp, "down_proj", None)
+        if attn_proj is None or mlp_proj is None:
+            raise RuntimeError(
+                f"Layer {layer_idx}: expected self_attn.o_proj and mlp.down_proj "
+                f"but found attn attrs={[a for a in dir(layer.self_attn) if 'proj' in a]}, "
+                f"mlp attrs={[a for a in dir(layer.mlp) if 'proj' in a]}"
+            )
+
         for proj_name in ["o_proj", "down_proj"]:
             if proj_name == "o_proj":
-                module = layer.self_attn.o_proj
+                module = attn_proj
             elif proj_name == "down_proj":
-                module = layer.mlp.down_proj
+                module = mlp_proj
             else:
                 continue
 

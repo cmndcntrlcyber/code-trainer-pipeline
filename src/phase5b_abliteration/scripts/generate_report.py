@@ -4,10 +4,19 @@ phase5b_abliteration/scripts/generate_report.py
 Download evaluation results from Hub and produce a comparative report
 at docs/sweep/phase5b-abliteration-report.md.
 
+Supports cross-model comparison when --baseline-results-repo is provided:
+generates a 4x4 matrix of {Qwen base, Qwen fine-tuned, Gemma base, Gemma
+fine-tuned} x {control, obliteratus, nousresearch, abliterix}.
+
 Usage:
     set -a && source .env && set +a
     python -m src.phase5b_abliteration.scripts.generate_report \
         --config src/config/config.yaml
+
+    # Cross-model comparison (includes baselines):
+    python -m src.phase5b_abliteration.scripts.generate_report \
+        --config src/config/config.yaml \
+        --baseline-results-repo cmndcntrlcyber/qwen14b-base-abliterated-abliteration-results
 
     # Override results repo:
     python -m src.phase5b_abliteration.scripts.generate_report \
@@ -136,12 +145,90 @@ def build_report(results_dir: Path) -> str:
     return "\n".join(lines)
 
 
+def build_cross_model_report(
+    results_dirs: dict[str, Path],
+) -> str:
+    """Build a cross-model comparison report from multiple result directories."""
+    techniques = ["control", "obliteratus", "nousresearch", "abliterix"]
+    metrics = ["refusal_rate", "kl_divergence", "perplexity", "gsm8k_acc"]
+
+    lines = [
+        "# Phase 5b: Cross-Model Abliteration Comparison",
+        "",
+        "## Comparison Matrix",
+        "",
+    ]
+
+    for metric in metrics:
+        metric_label = metric.replace("_", " ").title()
+        lines.append(f"### {metric_label}")
+        lines.append("")
+
+        header = "| Technique |"
+        separator = "|-----------|"
+        for model_name in results_dirs:
+            header += f" {model_name} |"
+            separator += "------------|"
+        lines.append(header)
+        lines.append(separator)
+
+        for tech in techniques:
+            row = f"| **{tech}** |"
+            for model_name, results_dir in results_dirs.items():
+                value = _extract_metric(results_dir, tech, metric)
+                row += f" {value} |"
+            lines.append(row)
+
+        lines.append("")
+
+    lines.extend([
+        "## Delta Analysis (Fine-tuned vs Base)",
+        "",
+        "Positive delta = fine-tuning increased the metric; "
+        "negative = decreased.",
+        "",
+    ])
+
+    return "\n".join(lines)
+
+
+def _extract_metric(results_dir: Path, technique: str, metric: str) -> str:
+    """Extract a metric value from a technique's results JSON."""
+    if technique == "control":
+        json_file = results_dir / "control_results.json"
+    else:
+        json_file = results_dir / f"{technique}_results.json"
+
+    if not json_file.exists():
+        return "N/A"
+
+    try:
+        data = json.loads(json_file.read_text())
+    except (json.JSONDecodeError, OSError):
+        return "N/A"
+
+    if metric == "refusal_rate" and "refusal" in data:
+        return f"{data['refusal'].get('refusal_rate', -1):.2%}"
+    elif metric == "kl_divergence" and "kl_divergence" in data:
+        return f"{data['kl_divergence'].get('kl_divergence_mean', -1):.4f}"
+    elif metric == "perplexity" and "perplexity" in data:
+        return f"{data['perplexity'].get('perplexity', -1):.2f}"
+    elif metric == "gsm8k_acc" and "benchmarks" in data:
+        bench = data["benchmarks"].get("gsm8k", {})
+        acc = bench.get("acc") or bench.get("acc,none", -1)
+        if isinstance(acc, (int, float)) and acc >= 0:
+            return f"{acc:.2%}"
+    return "N/A"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Generate Phase 5b abliteration comparative report"
     )
     parser.add_argument("--config", default="src/config/config.yaml")
     parser.add_argument("--results-repo", default=None)
+    parser.add_argument("--baseline-results-repo", default=None,
+                        help="Results repo for baseline (pre-fine-tuning) runs")
     parser.add_argument("--output", default=None)
     args = parser.parse_args()
 
@@ -157,6 +244,21 @@ def main():
     local_dir = Path("data/abliteration_results")
     logger.info("Downloading results from %s...", results_repo)
     download_results(results_repo, token, local_dir)
+
+    if args.baseline_results_repo:
+        baseline_dir = Path("data/abliteration_results_baseline")
+        logger.info("Downloading baseline results from %s...", args.baseline_results_repo)
+        download_results(args.baseline_results_repo, token, baseline_dir)
+
+        cross_report = build_cross_model_report({
+            "Qwen base": baseline_dir / "qwen-base" if (baseline_dir / "qwen-base").exists() else baseline_dir,
+            "Qwen fine-tuned": local_dir,
+            "Gemma base": baseline_dir / "gemma-base" if (baseline_dir / "gemma-base").exists() else baseline_dir,
+        })
+        cross_path = REPORT_DIR / "phase5b-cross-model-comparison.md"
+        cross_path.parent.mkdir(parents=True, exist_ok=True)
+        cross_path.write_text(cross_report)
+        logger.info("Cross-model report written to %s", cross_path)
 
     report = build_report(local_dir)
 

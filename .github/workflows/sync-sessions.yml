@@ -1,0 +1,60 @@
+name: Sync CoT RL Sessions from R2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync-sessions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rclone
+        run: curl -fsSL https://rclone.org/install.sh | sudo bash
+
+      - name: Configure rclone for R2
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf <<EOF
+          [r2]
+          type = s3
+          provider = Cloudflare
+          access_key_id = ${R2_ACCESS_KEY_ID}
+          secret_access_key = ${R2_SECRET_ACCESS_KEY}
+          endpoint = https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com
+          acl = private
+          EOF
+
+      - name: Pull sessions from R2
+        run: |
+          mkdir -p data/cot_rl_sessions
+          rclone sync r2:cot-sessions/ data/cot_rl_sessions/ \
+            --exclude "*.key" \
+            --exclude "file-history/**" \
+            --exclude "memory/**" \
+            --transfers 8 \
+            --checkers 16 \
+            --stats-one-line \
+            -v
+
+      - name: Commit new sessions
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/cot_rl_sessions/
+          if git diff --cached --quiet; then
+            echo "No new sessions to commit"
+          else
+            count=$(git diff --cached --name-only | wc -l)
+            git commit -m "chore: sync ${count} cot_rl_session files from R2 [skip ci]"
+            git push
+          fi

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SYNC_SCRIPT="${SCRIPT_DIR}/scripts/sync_sessions_to_r2.sh"
+
+if [ ! -x "$SYNC_SCRIPT" ]; then
+  echo "[pre-push] sync script not found at $SYNC_SCRIPT, skipping session sync"
+  exit 0
+fi
+
+if ! command -v rclone &>/dev/null; then
+  echo "[pre-push] rclone not installed, skipping session sync"
+  exit 0
+fi
+
+echo "[pre-push] Syncing Claude sessions to R2..."
+"$SYNC_SCRIPT"

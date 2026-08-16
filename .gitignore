@@ -6,6 +6,29 @@ __pycache__
 *.log
 *.pid
 
+# Large binary files — never commit these
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.onnx
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+*.parquet
+*.arrow
+
+# Archives
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.zip
+*.7z
+*.rar
+
 # Training artifacts
 models/
 wandb/
@@ -32,3 +55,14 @@ data/outputs/*
 data/v7_mixed/
 data/v8_mixed/
 data/v9_mixed/
+
+# Claude session transcripts — private CoT/RL training data
+data/cot_rl_sessions/
+
+# Abliteration / GGUF working directories
+data/gguf_work/
+data/abliterated/
+
+# Sweep & validation results (regenerated from HF Jobs)
+data/sweep_results/
+data/v*_validation/

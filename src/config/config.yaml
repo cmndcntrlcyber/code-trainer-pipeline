@@ -324,6 +324,192 @@ abliteration:
     quants:
       - "Q4_K_M"
 
+# Phase 5b-Baseline: Pre-fine-tuning abliteration baselines
+# Runs abliteration against raw base models (no adapter merge) for both Qwen
+# and Gemma. Produces comparison data against post-fine-tuning abliteration.
+# Both runs execute sequentially in a single HF Job.
+abliteration_baselines:
+  runs:
+    - name: qwen-base
+      base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+      source_adapter: null
+      output_base: ${HF_USERNAME}/qwen14b-base-abliterated
+    - name: gemma-base
+      base_model: "google/gemma-4-12B-it"
+      source_adapter: null
+      output_base: ${HF_USERNAME}/gemma4-12b-base-abliterated
+  techniques:
+    - name: obliteratus
+      preset: advanced
+      n_directions: 4
+      norm_preserve: true
+    - name: nousresearch
+      method: biprojected
+      n_samples: 512
+      quantization: null
+    - name: abliterix
+      steering_method: SRA
+      optuna_trials: 50
+  evaluation:
+    harmful_dataset: "Undi95/orthogonal-activation-steering-TOXIC"
+    harmless_dataset: "tatsu-lab/alpaca"
+    n_eval_samples: 200
+    benchmark_tasks:
+      - gsm8k
+      - mmlu
+      - truthfulqa_mc2
+    num_fewshot: 0
+    batch_size: 16
+  cloud:
+    hardware: "a100-large"
+    timeout_seconds: 43200       # 12h — two models × three techniques + benchmarks
+    wait_timeout_seconds: 50400  # 14h local poll budget
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+    quants:
+      - "Q4_K_M"
+
+# Phase 5b-Gemma: Post-fine-tuning abliteration for Gemma
+gemma_abliteration:
+  base_model: "google/gemma-4-12B-it"
+  source_adapter: ${HF_USERNAME}/gemma4-12b-code-trainer-aggressive
+  output_base: ${HF_USERNAME}/gemma4-12b-code-trainer
+  techniques:
+    - name: obliteratus
+      preset: advanced
+      n_directions: 4
+      norm_preserve: true
+    - name: nousresearch
+      method: biprojected
+      n_samples: 512
+      quantization: null
+    - name: abliterix
+      steering_method: SRA
+      optuna_trials: 50
+  evaluation:
+    harmful_dataset: "Undi95/orthogonal-activation-steering-TOXIC"
+    harmless_dataset: "tatsu-lab/alpaca"
+    n_eval_samples: 200
+    benchmark_tasks:
+      - gsm8k
+      - mmlu
+      - truthfulqa_mc2
+    num_fewshot: 0
+    batch_size: 16
+  cloud:
+    hardware: "a100-large"
+    timeout_seconds: 21600
+    wait_timeout_seconds: 28800
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+    quants:
+      - "Q4_K_M"
+
+# Phase 3b: Domain-Adaptive Continued Pretraining (DAPT)
+# Causal LM next-token prediction on raw offsec code + PDF knowledge corpus.
+# Runs BEFORE SFT to inject domain vocabulary and security patterns.
+dapt:
+  base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+  corpus_dirs:
+    - data/offensive-security/repositories
+    - data/pdf_captures
+  max_seq_length: 4096
+  lora_r: 32
+  lora_alpha: 64
+  lora_dropout: 0.05
+  learning_rate: 5e-5
+  num_epochs: 1
+  min_lines: 10
+  max_lines: 1000
+  output_adapter: ${HF_USERNAME}/qwen14b-dapt-offsec
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-phase3b-dapt"
+    timeout_seconds: 36000
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+
+# Phase 4c: Chain-of-Thought RL (post-SFT refinement)
+# Stage 1: GRPO on tool-use trajectories with rule-based reward
+# Stage 2: DPO on reasoning quality with HTB/THM positive examples
+rl_training:
+  grpo:
+    base_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v9_mixed
+    base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+    prompt_dataset: ${HF_USERNAME}/code-trainer-v10-grpo-prompts
+    num_generations: 4
+    learning_rate: 5e-7
+    kl_coef: 0.1
+    max_new_tokens: 1024
+    output_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-grpo
+  dpo:
+    base_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-grpo
+    base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+    preference_dataset: ${HF_USERNAME}/code-trainer-v10-dpo-pairs
+    beta: 0.1
+    learning_rate: 1e-6
+    max_length: 4096
+    output_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-dpo
+  v10_validation:
+    eval_loss_threshold: 0.50
+    tool_call_pass_rate: 0.85
+    tool_call_scenarios: 14
+    agent_progress_threshold: 5
+    agent_scenarios: 7
+    gsm8k_threshold: 0.60
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-phase4c-rl"
+    timeout_seconds: 36000
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+
+# Phase 4e: RLAIF Reward Modeling
+# AI preference labeling + Bradley-Terry scalar reward model
+rlaif:
+  policy_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+  policy_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-dpo
+  reward_model_base: "Qwen/Qwen2.5-Coder-1.5B-Instruct"
+  reward_model_output: ${HF_USERNAME}/code-trainer-reward-model
+  preference_dataset: ${HF_USERNAME}/code-trainer-rlaif-preferences
+  n_preference_pairs: 8000
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-phase4e-rlaif"
+    timeout_seconds: 14400
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+
+# Phase 4f: RL Fine-Tuning (PPO with learned reward)
+ppo_training:
+  policy_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-dpo
+  base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+  reward_model: ${HF_USERNAME}/code-trainer-reward-model
+  learning_rate: 1e-6
+  kl_target: 0.05
+  clip_range: 0.2
+  batch_size: 4
+  ppo_epochs: 2
+  output_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-ppo
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-phase4f-ppo"
+    timeout_seconds: 36000
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+
 # Phase 4-Gemma: Gemma-4-12B Fine-tuning (parallel to qwen_finetuning)
 # 12B dense model with native vision, Q4_K_M GGUF ~7.5 GB fits RTX 5060 Ti 16GB.
 gemma_finetuning:
