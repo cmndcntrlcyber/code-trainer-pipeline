@@ -156,13 +156,16 @@ def main():
         dataloader_num_workers=4,
     )
 
+    def formatting_func(examples):
+        return examples["text"]
+
     trainer = SFTTrainer(
         model=model,
         args=training_args,
         train_dataset=dataset,
-        dataset_text_field="text",
+        formatting_func=formatting_func,
         max_seq_length=max_seq_length,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         packing=True,
     )
 
