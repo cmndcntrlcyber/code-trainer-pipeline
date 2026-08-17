@@ -1,12 +1,18 @@
 """
-phase4c_rl/data/ingest_htb_sessions.py
+phase4c_rl/data/ingest_oco_sessions.py
 
-Ingest HTB/TryHackMe chat session histories and convert them into
+Ingest offensive security session histories and convert them into
 structured HuggingFace dataset format with <tool_call> tags mapped to
 NEXUS_TOOLS_V10 schema names.
 
-Accepts a directory of session files in JSON or plain-text format and
-outputs a datasets-compatible directory with train/validation splits.
+Supports four session sources (organized as subdirectories):
+    data/cot_rl_sessions/htb/        — HackTheBox completed room histories
+    data/cot_rl_sessions/thm/        — TryHackMe completed room histories
+    data/cot_rl_sessions/claude/     — Claude session histories (all hosts)
+    data/cot_rl_sessions/bugbounty/  — Bug bounty program sessions
+
+All subdirectories are scanned recursively. Each session file is tagged
+with its source (htb, thm, claude, bugbounty) based on its parent directory.
 
 JSON format (expected):
     [
@@ -21,9 +27,9 @@ Text format (expected):
     separated by blank lines between turns.
 
 Usage:
-    python -m src.phase4c_rl.data.ingest_htb_sessions \
-        --input-dir data/htb_sessions \
-        --output-dir data/htb_converted \
+    python -m src.phase4c_rl.data.ingest_oco_sessions \
+        --input-dir data/cot_rl_sessions \
+        --output-dir data/oco_converted \
         --format json
 """
 import argparse
@@ -292,11 +298,11 @@ def convert_session(messages: list[dict]) -> dict | None:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Ingest HTB/TryHackMe sessions into HF dataset format"
+        description="Ingest OCO (offensive cyber operations) sessions into HF dataset format"
     )
     parser.add_argument("--input-dir", required=True,
                         help="Directory containing session files")
-    parser.add_argument("--output-dir", default="data/htb_converted",
+    parser.add_argument("--output-dir", default="data/oco_converted",
                         help="Output directory for HF dataset")
     parser.add_argument("--format", choices=["json", "text"], default="json",
                         help="Input file format")

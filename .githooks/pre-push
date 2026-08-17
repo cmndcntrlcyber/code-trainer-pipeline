@@ -9,10 +9,15 @@ if [ ! -x "$SYNC_SCRIPT" ]; then
   exit 0
 fi
 
-if ! command -v rclone &>/dev/null; then
-  echo "[pre-push] rclone not installed, skipping session sync"
+if ! command -v wrangler &>/dev/null; then
+  echo "[pre-push] wrangler not installed, skipping session sync"
+  exit 0
+fi
+
+if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+  echo "[pre-push] CLOUDFLARE_API_TOKEN not set, skipping session sync"
   exit 0
 fi
 
 echo "[pre-push] Syncing Claude sessions to R2..."
-"$SYNC_SCRIPT"
+timeout 60 "$SYNC_SCRIPT" || echo "[pre-push] Session sync skipped/timed out (push continues)"

@@ -5,6 +5,7 @@ __pycache__
 .DS_Store
 *.log
 *.pid
+.wrangler/
 
 # Large binary files — never commit these
 *.gguf
@@ -57,7 +58,8 @@ data/v8_mixed/
 data/v9_mixed/
 
 # Claude session transcripts — private CoT/RL training data
-data/cot_rl_sessions/
+data/cot_rl_sessions/*
+!data/cot_rl_sessions/.gitkeep
 
 # Abliteration / GGUF working directories
 data/gguf_work/

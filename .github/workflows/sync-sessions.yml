@@ -1,60 +1,80 @@
-name: Sync CoT RL Sessions from R2
+name: Validate CoT Session Pipeline
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'  # weekly Monday 6am — just a health check
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  sync-sessions:
+  check-r2:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install rclone
-        run: curl -fsSL https://rclone.org/install.sh | sudo bash
-
-      - name: Configure rclone for R2
+      - name: Report R2 session inventory
         env:
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          mkdir -p ~/.config/rclone
-          cat > ~/.config/rclone/rclone.conf <<EOF
-          [r2]
-          type = s3
-          provider = Cloudflare
-          access_key_id = ${R2_ACCESS_KEY_ID}
-          secret_access_key = ${R2_SECRET_ACCESS_KEY}
-          endpoint = https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com
-          acl = private
-          EOF
+          python3 -c '
+          import json, urllib.request, sys, os
 
-      - name: Pull sessions from R2
-        run: |
-          mkdir -p data/cot_rl_sessions
-          rclone sync r2:cot-sessions/ data/cot_rl_sessions/ \
-            --exclude "*.key" \
-            --exclude "file-history/**" \
-            --exclude "memory/**" \
-            --transfers 8 \
-            --checkers 16 \
-            --stats-one-line \
-            -v
+          account_id = os.environ["CLOUDFLARE_ACCOUNT_ID"]
+          token = os.environ["CLOUDFLARE_API_TOKEN"]
+          bucket = "cot-sessions"
+          base_url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/r2/buckets/{bucket}/objects"
 
-      - name: Commit new sessions
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/cot_rl_sessions/
-          if git diff --cached --quiet; then
-            echo "No new sessions to commit"
-          else
-            count=$(git diff --cached --name-only | wc -l)
-            git commit -m "chore: sync ${count} cot_rl_session files from R2 [skip ci]"
-            git push
-          fi
+          # Paginated listing
+          all_objects = []
+          cursor = ""
+          page = 0
+          while True:
+              page += 1
+              url = f"{base_url}?per_page=1000"
+              if cursor:
+                  url += f"&cursor={cursor}"
+              req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+              with urllib.request.urlopen(req) as resp:
+                  data = json.load(resp)
+              all_objects.extend(data.get("result", []))
+              cursor = (data.get("result_info") or {}).get("cursor", "")
+              if not cursor:
+                  break
+
+          # Group by host/project prefix
+          groups = {}
+          for obj in all_objects:
+              parts = obj["key"].split("/")
+              prefix = "/".join(parts[:2]) if len(parts) >= 2 else parts[0]
+              if prefix not in groups:
+                  groups[prefix] = {"sessions": 0, "total": 0, "size": 0}
+              groups[prefix]["total"] += 1
+              groups[prefix]["size"] += obj.get("size", 0)
+              if obj["key"].endswith(".jsonl") and "/subagents/" not in obj["key"]:
+                  groups[prefix]["sessions"] += 1
+
+          total_sessions = sum(g["sessions"] for g in groups.values())
+          total_objects = sum(g["total"] for g in groups.values())
+          total_size = sum(g["size"] for g in groups.values())
+
+          lines = []
+          lines.append("## CoT Session Inventory\n")
+          lines.append(f"Listed {total_objects} objects across {page} page(s)\n")
+          lines.append("| Host/Project | Sessions | Objects | Size |")
+          lines.append("|---|---|---|---|")
+          for prefix in sorted(groups):
+              g = groups[prefix]
+              lines.append(f"| {prefix} | {g[\"sessions\"]} | {g[\"total\"]} | {g[\"size\"]/(1024*1024):.1f} MB |")
+          lines.append(f"\n**Total: {total_sessions} sessions, {total_objects} objects, {total_size/(1024*1024):.1f} MB**")
+
+          output = "\n".join(lines)
+          print(output)
+
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "")
+          if summary_path:
+              with open(summary_path, "a") as f:
+                  f.write(output + "\n")
+          '

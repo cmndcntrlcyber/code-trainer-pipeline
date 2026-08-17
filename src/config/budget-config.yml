@@ -208,7 +208,11 @@ rl_training:
     max_pairs: 500               # small focused set
     output_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-dpo-budget
 
-  # Session data directory — populate before running Phase 4c
+  # Populate before running Phase 4c:
+  #   data/cot_rl_sessions/htb/        — HackTheBox completed rooms
+  #   data/cot_rl_sessions/thm/        — TryHackMe completed rooms
+  #   data/cot_rl_sessions/claude/     — Claude session histories
+  #   data/cot_rl_sessions/bugbounty/  — Bug bounty program sessions
   session_data_dir: data/cot_rl_sessions
 
   v10_validation:

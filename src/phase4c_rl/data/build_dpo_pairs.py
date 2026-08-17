@@ -2,7 +2,7 @@
 phase4c_rl/data/build_dpo_pairs.py
 
 Combine negative examples (from collect_negatives.py) and positive examples
-(from HTB sessions or curated data) into DPO preference pairs for Phase 4c
+(from OCO sessions — HTB, THM, bug bounty, Claude histories) into DPO preference pairs for Phase 4c
 DPO training.
 
 Output format (HF datasets compatible):
@@ -11,13 +11,13 @@ Output format (HF datasets compatible):
 Usage:
     python -m src.phase4c_rl.data.build_dpo_pairs \
         --negatives-dir data/rl_negatives \
-        --positives-dir data/htb_converted \
+        --positives-dir data/oco_converted \
         --output-dir data/dpo_pairs
 
     # Push to Hub:
     python -m src.phase4c_rl.data.build_dpo_pairs \
         --negatives-dir data/rl_negatives \
-        --positives-dir data/htb_converted \
+        --positives-dir data/oco_converted \
         --output-dir data/dpo_pairs \
         --push-to-hub
 """
@@ -53,12 +53,12 @@ def _load_negatives(negatives_dir: Path) -> list[dict]:
 def _load_positives(positives_dir: Path) -> list[dict]:
     """Load positive examples from JSONL dataset files.
 
-    Looks for train.jsonl (from ingest_htb_sessions.py) or a flat JSON list.
+    Looks for train.jsonl (from ingest_oco_sessions.py) or a flat JSON list.
     Positive examples must have 'messages' with at least one <tool_call>.
     """
     positives = []
 
-    # Try JSONL files first (from ingest_htb_sessions).
+    # Try JSONL files first (from ingest_oco_sessions).
     for jsonl in sorted(positives_dir.glob("*.jsonl")):
         with open(jsonl) as f:
             for line in f:
