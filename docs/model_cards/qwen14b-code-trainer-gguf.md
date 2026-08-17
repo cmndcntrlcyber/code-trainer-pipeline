@@ -30,7 +30,7 @@ merge step.
 | File | Quantization | Size (≈) | Notes |
 |---|---|---|---|
 | `Qwen2.5-Coder-14B-Instruct-Q5_K_M.gguf` | Q5_K_M | ~10.5 GB | Recommended default (V9+) — preserves `<tool_call>` tag fidelity |
-| `Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf` | Q4_K_M | ~9 GB | Fallback — balanced quality / footprint |
+| `Qwen2.5-Coder-14B-Instruct-Q5_K_M.gguf` | Q4_K_M | ~9 GB | Fallback — balanced quality / footprint |
 
 Additional quantizations (Q8_0, F16) can be produced by passing
 `--quants` to `launch_convert.py`.
@@ -73,7 +73,7 @@ Quantization to Q5_K_M typically introduces minimal perplexity penalty
 
 ```bash
 llama-server \
-  -m Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf \
+  -m Qwen2.5-Coder-14B-Instruct-Q5_K_M.gguf \
   --host 0.0.0.0 --port 8080 \
   --ctx-size 8192 --n-gpu-layers 999
 ```
@@ -81,7 +81,7 @@ llama-server \
 ### Ollama Modelfile
 
 ```text
-FROM ./Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf
+FROM ./Qwen2.5-Coder-14B-Instruct-Q5_K_M.gguf
 TEMPLATE """{{ if .System }}<|im_start|>system
 {{ .System }}<|im_end|>
 {{ end }}{{ range .Messages }}{{ if eq .Role "user" }}<|im_start|>user
@@ -103,7 +103,7 @@ PARAMETER num_ctx 8192
 from llama_cpp import Llama
 
 llm = Llama(
-    model_path="Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf",
+    model_path="Qwen2.5-Coder-14B-Instruct-Q5_K_M.gguf",
     n_ctx=8192,
     n_gpu_layers=999,
 )
