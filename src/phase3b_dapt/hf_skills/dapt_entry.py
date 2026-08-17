@@ -152,12 +152,12 @@ def main():
         logging_steps=10,
         save_strategy="epoch",
         save_total_limit=2,
-        report_to="wandb",
+        report_to="none",
         remove_unused_columns=False,
         dataloader_num_workers=4,
         dataset_text_field="text",
         max_length=max_seq_length,
-        packing=True,
+        packing=False,
     )
 
     trainer = SFTTrainer(
