@@ -132,20 +132,21 @@ def main():
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
 
-    # Training arguments
-    from transformers import TrainingArguments
-    from trl import SFTTrainer
+    # Training arguments — trl 1.3.0 uses SFTConfig (not TrainingArguments)
+    # and all SFT-specific params (packing, max_length, dataset_text_field)
+    # live on the config object, not as SFTTrainer kwargs.
+    from trl import SFTConfig, SFTTrainer
 
     output_dir = "/workspace/dapt_output"
 
-    training_args = TrainingArguments(
+    sft_config = SFTConfig(
         output_dir=output_dir,
         num_train_epochs=num_epochs,
         per_device_train_batch_size=2,
         gradient_accumulation_steps=8,
         learning_rate=learning_rate,
         lr_scheduler_type="cosine",
-        warmup_ratio=0.03,
+        warmup_steps=50,
         bf16=True,
         gradient_checkpointing=True,
         logging_steps=10,
@@ -154,19 +155,16 @@ def main():
         report_to="wandb",
         remove_unused_columns=False,
         dataloader_num_workers=4,
+        dataset_text_field="text",
+        max_length=max_seq_length,
+        packing=True,
     )
-
-    def formatting_func(examples):
-        return examples["text"]
 
     trainer = SFTTrainer(
         model=model,
-        args=training_args,
+        args=sft_config,
         train_dataset=dataset,
-        formatting_func=formatting_func,
-        max_seq_length=max_seq_length,
         processing_class=tokenizer,
-        packing=True,
     )
 
     logger.info("Starting DAPT training...")
