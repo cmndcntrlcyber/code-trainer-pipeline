@@ -135,7 +135,7 @@ dapt:
   cloud:
     hardware: "a100-large"
     wandb_project: "rtpi-phase3b-dapt"
-    timeout_seconds: 9000          # 2.5h — 150% of 1.5h estimate
+    timeout_seconds: 18000         # 5h — DAPT on 32K rows without packing needs ~3-4h
     poll_interval: 60
     image: "huggingface/transformers-pytorch-gpu:latest"
     repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
