@@ -95,14 +95,21 @@ def main():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
+    try:
+        import flash_attn  # noqa: F401
+        attn_impl = "flash_attention_2"
+    except ImportError:
+        attn_impl = "sdpa"
+
     model = AutoModelForCausalLM.from_pretrained(
         base_model,
         torch_dtype=torch.bfloat16,
         device_map="auto",
         trust_remote_code=True,
         token=token,
-        attn_implementation="flash_attention_2",
+        attn_implementation=attn_impl,
     )
+    logger.info("Attention implementation: %s", attn_impl)
     model.config.use_cache = False
 
     # LoRA config -- target all attention + MLP projections
