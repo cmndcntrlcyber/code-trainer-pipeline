@@ -158,6 +158,7 @@ dapt:
 
 qwen_finetuning:
   model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+  dapt_adapter: ${HF_USERNAME}/qwen14b-dapt-offsec   # merge DAPT LoRA before SFT
   hardware: "a100-large"
   dataset_id: "cmndcntrlcyber/code-trainer-v9-mixed"
   dataset_revision: "main"

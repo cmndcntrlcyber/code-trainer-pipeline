@@ -26,6 +26,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
+from datasets import Dataset
+from transformers import AutoTokenizer
+
 from src.config.settings import load_config
 
 logging.basicConfig(
@@ -121,6 +124,7 @@ def main():
     min_lines = int(dapt_cfg.get("min_lines", 10))
     max_lines = int(dapt_cfg.get("max_lines", 1000))
     max_seq_length = int(dapt_cfg.get("max_seq_length", 4096))
+    max_documents = int(dapt_cfg.get("max_documents", 0))
     base_model = dapt_cfg.get("base_model", "Qwen/Qwen2.5-Coder-14B-Instruct")
 
     corpus_dir = Path("data/offensive-security/repositories")
@@ -143,29 +147,47 @@ def main():
         logger.warning("No files to process. Exiting.")
         return
 
-    # 3. Load tokenizer
-    from transformers import AutoTokenizer
+    # 2b. Apply max_documents cap BEFORE tokenization to avoid OOM.
+    # Shuffle first so the cap samples across the repo tree, not just
+    # the first N alphabetically.
+    if max_documents and len(files) > max_documents:
+        import random
+        random.seed(42)
+        random.shuffle(files)
+        files = files[:max_documents]
+        logger.info("Capped to %d files (max_documents=%d)", len(files), max_documents)
 
+    # 3. Load tokenizer
     logger.info("Loading tokenizer: %s", base_model)
     tokenizer = AutoTokenizer.from_pretrained(base_model, trust_remote_code=True)
 
-    # 4. Read, tokenize, and chunk
-    all_chunks: list[str] = []
-    for fpath in files:
-        try:
-            text = fpath.read_text(encoding="utf-8", errors="ignore")
-        except (OSError, PermissionError):
-            continue
-        chunks = chunk_text(text, tokenizer, max_seq_length)
-        all_chunks.extend(chunks)
+    # 4. Read, tokenize, and chunk — stream to JSONL to avoid OOM
+    chunks_path = output_dir / "chunks.jsonl"
+    import json
+    total_chunks = 0
+    with open(chunks_path, "w") as out_f:
+        for i, fpath in enumerate(files):
+            try:
+                text = fpath.read_text(encoding="utf-8", errors="ignore")
+            except (OSError, PermissionError):
+                continue
+            chunks = chunk_text(text, tokenizer, max_seq_length)
+            for chunk in chunks:
+                out_f.write(json.dumps({"text": chunk}) + "\n")
+                total_chunks += 1
+            if (i + 1) % 2000 == 0:
+                logger.info("  processed %d/%d files (%d chunks so far)", i + 1, len(files), total_chunks)
 
-    logger.info("Total documents (chunks): %d", len(all_chunks))
+    logger.info("Total documents (chunks): %d", total_chunks)
 
-    # 5. Build HuggingFace dataset
-    from datasets import Dataset
-
-    ds = Dataset.from_dict({"text": all_chunks})
-    ds.save_to_disk(str(output_dir))
+    # 5. Build HuggingFace dataset from JSONL (memory-efficient).
+    # Pass an absolute path via data_files= to avoid Dataset.from_json
+    # calling Path().resolve() internally, which fails on some mounts.
+    abs_chunks = str(Path(chunks_path).absolute())
+    ds = Dataset.from_json(data_files=abs_chunks)
+    abs_output = str(Path(output_dir).absolute())
+    ds.save_to_disk(abs_output)
+    chunks_path.unlink(missing_ok=True)
     logger.info("Dataset saved to %s (%d rows)", output_dir, len(ds))
 
     # 6. Optionally push to Hub

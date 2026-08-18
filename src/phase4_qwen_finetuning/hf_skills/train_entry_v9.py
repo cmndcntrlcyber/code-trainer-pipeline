@@ -83,6 +83,7 @@ def main():
     )
 
     model_id = params.get("model_id", "Qwen/Qwen2.5-Coder-14B-Instruct")
+    dapt_adapter = params.get("dapt_adapter")
     dataset_id = params.get("dataset_id", "cmndcntrlcyber/code-trainer-v9-mixed")
     dataset_revision = params.get("dataset_revision", "main")
     num_epochs = int(params.get("num_epochs", 1))
@@ -91,9 +92,10 @@ def main():
     wandb_project = os.environ.get("WANDB_PROJECT", "rtpi-phase4-qwen14b")
 
     logger.info("=" * 60)
-    logger.info(f"PHASE 4 V9 — {cfg.name} ({model_id})")
+    logger.info(f"PHASE 4 V10 — {cfg.name} ({model_id})")
     logger.info(f"  LoRA r={cfg.lora_r} alpha={cfg.lora_alpha} lr={cfg.learning_rate}")
     logger.info(f"  bs={cfg.batch_size} accum={cfg.gradient_accumulation} eff={cfg.effective_batch}")
+    logger.info(f"  dapt_adapter: {dapt_adapter or 'none (base model only)'}")
     logger.info(f"  dataset:    {dataset_id}@{dataset_revision}")
     logger.info(f"  adapter:    {adapter_repo}")
     logger.info(f"  curriculum: Phase A {PHASE_A_RATIO:.0%} lr={cfg.learning_rate} | Phase B {1-PHASE_A_RATIO:.0%} lr={PHASE_B_LR}")
@@ -122,13 +124,31 @@ def main():
                 remove_columns=ds["train"].column_names)
     logger.info(f"  splits: {list(ds.keys())}  train={len(ds['train'])} val={len(ds['validation'])}")
 
-    # ─── 2. Base model + LoRA ──────────────────────────────────────────────
-    logger.info(f"Loading {model_id} (BF16)")
+    # ─── 2. Base model + optional DAPT merge + SFT LoRA ─────────────────
+    token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+
+    try:
+        import flash_attn  # noqa: F401
+        attn_impl = "flash_attention_2"
+    except ImportError:
+        attn_impl = "sdpa"
+
+    logger.info(f"Loading {model_id} (BF16, attn={attn_impl})")
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
-        dtype=torch.bfloat16,
+        torch_dtype=torch.bfloat16,
         device_map="auto",
+        attn_implementation=attn_impl,
+        token=token,
     )
+
+    if dapt_adapter:
+        from peft import PeftModel
+        logger.info(f"Merging DAPT adapter: {dapt_adapter}")
+        model = PeftModel.from_pretrained(model, dapt_adapter, token=token)
+        model = model.merge_and_unload()
+        logger.info("DAPT adapter merged into base weights")
+
     model.config.use_cache = False
     model = prepare_model_for_kbit_training(model)
 
@@ -237,6 +257,7 @@ def main():
     (best_dir / "phase4-result.json").write_text(json.dumps({
         "config": cfg.__dict__,
         "model_id": model_id,
+        "dapt_adapter": dapt_adapter,
         "dataset": f"{dataset_id}@{dataset_revision}",
         "num_epochs": num_epochs,
         "curriculum": {

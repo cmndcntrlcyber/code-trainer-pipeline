@@ -24,6 +24,11 @@ def build_training_args(
     if packing is not None:
         sft_kwargs["packing"] = packing
 
+    import os
+
+    wandb_key = os.environ.get("WANDB_API_KEY")
+    report_to = "wandb" if wandb_key else "none"
+
     try:
         from trl import SFTConfig
         return SFTConfig(
@@ -50,7 +55,7 @@ def build_training_args(
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
             greater_is_better=False,
-            report_to="wandb",
+            report_to=report_to,
             run_name=f"phase4-{cfg.name}-epochs{num_epochs}",
             dataloader_num_workers=4,
             dataloader_pin_memory=True,

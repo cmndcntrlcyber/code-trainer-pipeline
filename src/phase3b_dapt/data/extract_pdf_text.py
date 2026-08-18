@@ -144,33 +144,38 @@ def main():
         logger.warning("No extractable text found. Exiting.")
         return
 
-    # 2. Load tokenizer
-    from transformers import AutoTokenizer
+    # 2. Chunk by character count (avoids loading transformers/torch).
+    # ~4 chars per token is a reasonable estimate for code/English text.
+    chars_per_chunk = max_seq_length * 4
+    min_chunk_chars = 256
 
-    logger.info("Loading tokenizer: %s", base_model)
-    tokenizer = AutoTokenizer.from_pretrained(base_model, trust_remote_code=True)
+    import json
+    chunks_path = output_dir / "chunks.jsonl"
+    total_chunks = 0
 
-    # 3. Tokenize and chunk
-    all_chunks: list[str] = []
-    for text in texts:
-        chunks = chunk_text(text, tokenizer, max_seq_length)
-        all_chunks.extend(chunks)
+    with open(chunks_path, "w") as out_f:
+        for i, text in enumerate(texts):
+            for start in range(0, len(text), chars_per_chunk):
+                chunk = text[start : start + chars_per_chunk]
+                if len(chunk.strip()) < min_chunk_chars:
+                    continue
+                out_f.write(json.dumps({"text": chunk}) + "\n")
+                total_chunks += 1
+            if (i + 1) % 500 == 0:
+                logger.info("  processed %d/%d documents (%d chunks)", i + 1, len(texts), total_chunks)
 
-    logger.info("Total documents (chunks): %d", len(all_chunks))
+    logger.info("Total documents (chunks): %d", total_chunks)
+    logger.info("JSONL written to %s", chunks_path)
 
-    # 4. Build HuggingFace dataset
-    from datasets import Dataset
-
-    ds = Dataset.from_dict({"text": all_chunks})
-    ds.save_to_disk(str(output_dir))
-    logger.info("Dataset saved to %s (%d rows)", output_dir, len(ds))
-
-    # 5. Optionally push to Hub
+    # 3. Optionally push to Hub (merge with code corpus externally)
     if args.push_to_hub:
+        from datasets import Dataset
+        abs_path = str(chunks_path.absolute()) if not str(chunks_path).startswith("/") else str(chunks_path)
+        ds = Dataset.from_json(abs_path)
         hub_name = dapt_cfg.get("output_adapter", "").replace("-adapter", "") + "-pdf-corpus"
         if not hub_name or hub_name == "-pdf-corpus":
             hub_name = "dapt-offsec-pdf-corpus"
-        logger.info("Pushing dataset to Hub: %s", hub_name)
+        logger.info("Pushing dataset to Hub: %s (%d rows)", hub_name, len(ds))
         ds.push_to_hub(hub_name, private=True)
         logger.info("Dataset pushed to Hub: %s", hub_name)
 

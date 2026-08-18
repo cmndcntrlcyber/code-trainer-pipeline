@@ -96,6 +96,9 @@ def main():
         "adapter_repo": adapter_repo,
         "output_dir": f"/tmp/phase4-v9-{cfg.name}",
     }
+    dapt_adapter = qf_cfg.get("dapt_adapter")
+    if dapt_adapter:
+        params["dapt_adapter"] = dapt_adapter
     if args.train_limit is not None:
         params["train_limit"] = args.train_limit
     if args.val_limit is not None:
