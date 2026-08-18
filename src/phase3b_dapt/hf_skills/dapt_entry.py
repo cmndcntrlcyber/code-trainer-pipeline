@@ -84,6 +84,11 @@ def main():
     dataset = load_dataset(dataset_id, split="train", token=token)
     logger.info("Dataset loaded: %d rows", len(dataset))
 
+    max_documents = int(params.get("max_documents", 0))
+    if max_documents and len(dataset) > max_documents:
+        dataset = dataset.shuffle(seed=42).select(range(max_documents))
+        logger.info("Capped dataset to %d rows (max_documents)", max_documents)
+
     # Load model + tokenizer
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
@@ -159,6 +164,10 @@ def main():
         dataset_text_field="text",
         max_length=max_seq_length,
         packing=False,
+        push_to_hub=True,
+        hub_model_id=output_adapter,
+        hub_token=token,
+        hub_strategy="checkpoint",
     )
 
     trainer = SFTTrainer(

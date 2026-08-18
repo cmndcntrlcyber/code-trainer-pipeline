@@ -85,6 +85,7 @@ def main():
         "learning_rate": float(dapt_cfg.get("learning_rate", 5e-5)),
         "num_epochs": int(dapt_cfg.get("num_epochs", 1)),
         "max_seq_length": int(dapt_cfg.get("max_seq_length", 4096)),
+        "max_documents": int(dapt_cfg.get("max_documents", 0)),
         "output_adapter": output_adapter,
         "wandb_project": cloud_cfg.get("wandb_project", "rtpi-phase3b-dapt"),
     }

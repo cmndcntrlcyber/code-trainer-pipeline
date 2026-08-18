@@ -130,12 +130,12 @@ dapt:
   num_epochs: 1
   min_lines: 10
   max_lines: 1000
-  max_documents: 10000
+  max_documents: 10000            # 10K rows — ~$13 (~4h runtime)
   output_adapter: ${HF_USERNAME}/qwen14b-dapt-offsec
   cloud:
     hardware: "a100-large"
     wandb_project: "rtpi-phase3b-dapt"
-    timeout_seconds: 18000         # 5h — DAPT on 32K rows without packing needs ~3-4h
+    timeout_seconds: 16200         # 4.5h — 10K rows @ 2048 seq_len should finish in ~4h
     poll_interval: 60
     image: "huggingface/transformers-pytorch-gpu:latest"
     repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
