@@ -123,26 +123,97 @@ def normalize_tool_name(name: str) -> str | None:
 def _parse_json_session(path: Path) -> list[dict] | None:
     """Parse a JSON session file into a list of message dicts."""
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError) as e:
-        logger.warning("Failed to parse %s: %s", path, e)
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as e:
+        logger.warning("Failed to read %s: %s", path, e)
         return None
 
-    # Handle both list-of-messages and wrapped formats.
-    if isinstance(data, dict):
-        # Try common wrapper keys.
-        for key in ("messages", "conversation", "turns", "chat", "history"):
-            if key in data and isinstance(data[key], list):
-                data = data[key]
-                break
-        else:
-            logger.warning("No message list found in %s", path)
-            return None
+    # Try single JSON document first.
+    try:
+        data = json.loads(text)
+        if isinstance(data, dict):
+            for key in ("messages", "conversation", "turns", "chat", "history"):
+                if key in data and isinstance(data[key], list):
+                    return data[key]
+        if isinstance(data, list):
+            return data
+    except json.JSONDecodeError:
+        pass
 
-    if not isinstance(data, list):
-        return None
+    # Try JSONL (one JSON object per line) — Claude Code session format.
+    return _parse_claude_jsonl(path, text)
 
-    return data
+
+def _content_blocks_to_text(content) -> str:
+    """Convert Anthropic API content blocks to plain text."""
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return str(content) if content else ""
+    parts = []
+    for block in content:
+        if isinstance(block, str):
+            parts.append(block)
+        elif isinstance(block, dict):
+            btype = block.get("type", "")
+            if btype == "text":
+                parts.append(block.get("text", ""))
+            elif btype == "tool_result":
+                result_content = block.get("content", "")
+                if isinstance(result_content, list):
+                    for sub in result_content:
+                        if isinstance(sub, dict) and sub.get("type") == "text":
+                            parts.append(sub.get("text", ""))
+                elif isinstance(result_content, str):
+                    parts.append(result_content)
+    return "\n".join(parts)
+
+
+def _extract_tool_calls(content) -> list[dict]:
+    """Extract tool_use blocks from Anthropic API content."""
+    if not isinstance(content, list):
+        return []
+    calls = []
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "tool_use":
+            calls.append({
+                "name": block.get("name", ""),
+                "arguments": block.get("input", {}),
+            })
+    return calls
+
+
+def _parse_claude_jsonl(path: Path, text: str) -> list[dict] | None:
+    """Parse Claude Code JSONL session into a list of message dicts."""
+    messages = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        etype = event.get("type", "")
+        if etype not in ("user", "assistant"):
+            continue
+
+        msg = event.get("message", {})
+        role = msg.get("role", etype)
+        content_raw = msg.get("content", "")
+
+        text_content = _content_blocks_to_text(content_raw)
+        tool_calls = _extract_tool_calls(content_raw)
+
+        entry = {"role": role, "content": text_content}
+        if tool_calls:
+            entry["tool_calls"] = tool_calls
+
+        if text_content.strip() or tool_calls:
+            messages.append(entry)
+
+    return messages if messages else None
 
 
 def _parse_text_session(path: Path) -> list[dict] | None:
