@@ -185,6 +185,8 @@ def main():
         wandb_project=wandb_project,
         dataset_text_field="text",
         packing=False,
+        hub_model_id=adapter_repo,
+        hub_token=token,
     )
     phase_a_args.max_steps = phase_a_steps
     phase_a_args.load_best_model_at_end = False
@@ -231,6 +233,8 @@ def main():
             wandb_project=wandb_project,
             dataset_text_field="text",
             packing=False,
+            hub_model_id=adapter_repo,
+            hub_token=token,
         )
         phase_b_args.max_steps = phase_b_steps
         phase_b_args.warmup_ratio = PHASE_B_WARMUP

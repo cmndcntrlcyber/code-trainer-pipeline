@@ -17,6 +17,8 @@ def build_training_args(
     wandb_project: str = "code-trainer-phase4",
     dataset_text_field: str | None = None,
     packing: bool | None = None,
+    hub_model_id: str | None = None,
+    hub_token: str | None = None,
 ):
     sft_kwargs = {}
     if dataset_text_field is not None:
@@ -28,6 +30,12 @@ def build_training_args(
 
     wandb_key = os.environ.get("WANDB_API_KEY")
     report_to = "wandb" if wandb_key else "none"
+
+    if hub_model_id and hub_token:
+        sft_kwargs["push_to_hub"] = True
+        sft_kwargs["hub_model_id"] = hub_model_id
+        sft_kwargs["hub_token"] = hub_token
+        sft_kwargs["hub_strategy"] = "checkpoint"
 
     try:
         from trl import SFTConfig
@@ -87,7 +95,7 @@ def build_training_args(
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
             greater_is_better=False,
-            report_to="wandb",
+            report_to=report_to,
             run_name=f"phase4-{cfg.name}-epochs{num_epochs}",
             dataloader_num_workers=4,
             dataloader_pin_memory=True,

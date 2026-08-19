@@ -164,7 +164,7 @@ qwen_finetuning:
   dataset_revision: "main"
   num_epochs_sweep: 1
   max_seq_length: 4096             # full context — no compromise here
-  train_limit: 20000              # 20K rows (from 40K) — sweet spot
+  train_limit: 15000              # 15K rows — ~6h at 4096 seq_len (corrected from 20K which took >5.5h)
 
   validation_sweep:
     - name: v10_pipeline
@@ -200,7 +200,7 @@ qwen_finetuning:
     hardware: "a100-large"
     wandb_project: "rtpi-phase4-qwen14b"
     adapter_base: ${HF_USERNAME}/qwen14b-code-trainer
-    timeout_seconds: 19800         # 5.5h — 150% of 3.5h estimate
+    timeout_seconds: 28800         # 8h — 15K rows at 4096 seq_len ~6h + DAPT merge overhead
     poll_interval: 60
     image: "huggingface/transformers-pytorch-gpu:latest"
     repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
