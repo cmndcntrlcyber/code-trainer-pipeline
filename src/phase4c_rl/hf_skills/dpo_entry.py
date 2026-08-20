@@ -179,9 +179,8 @@ def main():
         eval_strategy="steps" if val_ds else "no",
         eval_steps=50 if val_ds else None,
         max_length=max_length,
-        max_prompt_length=max_prompt_length,
         report_to="wandb" if os.environ.get("WANDB_API_KEY") else "none",
-        run_name=f"phase4c-dpo",
+        run_name="phase4c-dpo",
     )
 
     # ── 6. Train ──────────────────────────────────────────────────────────

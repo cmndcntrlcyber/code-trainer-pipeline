@@ -73,15 +73,14 @@ def main():
 
     lr = float(params.get("learning_rate", 5e-7))
     num_generations = int(params.get("num_generations", 4))
-    kl_coef = float(params.get("kl_coef", 0.1))
-    max_new_tokens = int(params.get("max_new_tokens", 1024))
+    beta = float(params.get("kl_coef", 0.04))
+    max_completion_length = int(params.get("max_new_tokens", 1024))
     num_epochs = int(params.get("num_epochs", 1))
     batch_size = int(params.get("batch_size", 2))
     gradient_accumulation = int(params.get("gradient_accumulation", 4))
     lora_r = int(params.get("lora_r", 32))
     lora_alpha = int(params.get("lora_alpha", 64))
     lora_dropout = float(params.get("lora_dropout", 0.05))
-    max_prompt_length = int(params.get("max_prompt_length", 2048))
 
     output_dir = Path(params.get("output_dir", "/tmp/phase4c-grpo"))
     wandb_project = os.environ.get("WANDB_PROJECT", "rtpi-phase4c-rl")
@@ -180,13 +179,10 @@ def main():
     model.print_trainable_parameters()
 
     # ── 4. GRPO reward wrapper ────────────────────────────────────────────
-    def reward_fn(completions, **kwargs):
-        """Wrap tool_call_reward for GRPOTrainer interface."""
-        texts = [
-            tokenizer.decode(c, skip_special_tokens=True) if not isinstance(c, str) else c
-            for c in completions
-        ]
-        return tool_call_reward(texts)
+    def reward_fn(prompts, completions, **kwargs):
+        """Wrap tool_call_reward for GRPOTrainer interface.
+        Completions are already decoded strings in trl 1.3.0+."""
+        return tool_call_reward(completions)
 
     # ── 5. Training config ────────────────────────────────────────────────
     wandb_mode = os.environ.get("WANDB_MODE")
@@ -205,9 +201,8 @@ def main():
         save_steps=100,
         save_total_limit=2,
         num_generations=num_generations,
-        max_completion_length=max_new_tokens,
-        max_prompt_length=max_prompt_length,
-        kl_coef=kl_coef,
+        max_completion_length=max_completion_length,
+        beta=beta,
         report_to="wandb" if os.environ.get("WANDB_API_KEY") else "none",
         run_name="phase4c-grpo",
     )
