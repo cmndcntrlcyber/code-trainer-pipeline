@@ -205,11 +205,11 @@ def main():
         save_steps=100,
         save_total_limit=2,
         num_generations=num_generations,
-        max_new_tokens=max_new_tokens,
+        max_completion_length=max_new_tokens,
         max_prompt_length=max_prompt_length,
         kl_coef=kl_coef,
         report_to="wandb" if os.environ.get("WANDB_API_KEY") else "none",
-        run_name=f"phase4c-grpo",
+        run_name="phase4c-grpo",
     )
 
     # ── 6. Train ──────────────────────────────────────────────────────────
