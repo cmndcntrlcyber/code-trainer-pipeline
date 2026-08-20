@@ -108,23 +108,39 @@ def main():
     if val_ds:
         logger.info("  validation: %d pairs", len(val_ds))
 
-    # ── 3. Load base model + merge GRPO adapter ──────────────────────────
-    logger.info("Loading base model: %s (BF16)", base_model_id)
-    model = AutoModelForCausalLM.from_pretrained(
-        base_model_id,
-        dtype=torch.bfloat16,
-        device_map="auto",
-    )
+    # ── 3. Load base model + merge adapter chain ──────────────────────────
+    token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+    dapt_adapter = params.get("dapt_adapter")
+
+    try:
+        import flash_attn  # noqa: F401
+        attn_impl = "flash_attention_2"
+    except ImportError:
+        attn_impl = "sdpa"
+
+    def _load_and_merge_base():
+        m = AutoModelForCausalLM.from_pretrained(
+            base_model_id,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            attn_implementation=attn_impl,
+            token=token,
+        )
+        if dapt_adapter:
+            logger.info("Merging DAPT adapter: %s", dapt_adapter)
+            m = PeftModel.from_pretrained(m, dapt_adapter, token=token)
+            m = m.merge_and_unload()
+        if base_adapter:
+            logger.info("Merging GRPO adapter: %s", base_adapter)
+            m = PeftModel.from_pretrained(m, base_adapter, token=token)
+            m = m.merge_and_unload()
+        return m
+
+    logger.info("Loading base model: %s (BF16, attn=%s)", base_model_id, attn_impl)
+    model = _load_and_merge_base()
     model.config.use_cache = False
-
-    if base_adapter:
-        logger.info("Loading and merging GRPO adapter: %s", base_adapter)
-        model = PeftModel.from_pretrained(model, base_adapter)
-        model = model.merge_and_unload()
-
     model = prepare_model_for_kbit_training(model)
 
-    # Apply fresh LoRA for DPO training.
     lora_cfg = LoraConfig(
         r=lora_r,
         lora_alpha=lora_alpha,
@@ -139,14 +155,7 @@ def main():
 
     # ── 4. Reference model (frozen copy) ─────────────────────────────────
     logger.info("Loading reference model for DPO (frozen)")
-    ref_model = AutoModelForCausalLM.from_pretrained(
-        base_model_id,
-        dtype=torch.bfloat16,
-        device_map="auto",
-    )
-    if base_adapter:
-        ref_model = PeftModel.from_pretrained(ref_model, base_adapter)
-        ref_model = ref_model.merge_and_unload()
+    ref_model = _load_and_merge_base()
     ref_model.eval()
 
     # ── 5. Training config ────────────────────────────────────────────────

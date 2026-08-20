@@ -257,7 +257,8 @@ vision_model:
 
 rl_training:
   grpo:
-    base_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10_pipeline
+    base_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v9_mixed
+    dapt_adapter: ${HF_USERNAME}/qwen14b-dapt-offsec
     base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
     prompt_dataset: ${HF_USERNAME}/code-trainer-v10-grpo-prompts
     num_generations: 3             # compromise: 2 (budget) < 3 < 4 (full)

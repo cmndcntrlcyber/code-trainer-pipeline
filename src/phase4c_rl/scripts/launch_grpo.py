@@ -82,6 +82,8 @@ def main():
     if not args.dry_run and not hf_token:
         raise SystemExit("HF_TOKEN env var required")
 
+    dapt_adapter = grpo_cfg.get("dapt_adapter")
+
     params = {
         "base_model": base_model,
         "base_adapter": base_adapter,
@@ -95,6 +97,8 @@ def main():
         "batch_size": 2,
         "gradient_accumulation": 4,
     }
+    if dapt_adapter:
+        params["dapt_adapter"] = dapt_adapter
 
     env = {
         "PHASE4C_GRPO_PARAMS_JSON": json.dumps(params),

@@ -132,19 +132,37 @@ def main():
     ds = ds.map(format_prompt, remove_columns=[c for c in ds.column_names if c != "prompt"])
     logger.info("Formatted %d prompts", len(ds))
 
-    # ── 3. Load base model + merge SFT adapter ───────────────────────────
-    logger.info("Loading base model: %s (BF16)", base_model_id)
+    # ── 3. Load base model + merge DAPT + merge SFT adapter ─────────────
+    token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+
+    try:
+        import flash_attn  # noqa: F401
+        attn_impl = "flash_attention_2"
+    except ImportError:
+        attn_impl = "sdpa"
+
+    logger.info("Loading base model: %s (BF16, attn=%s)", base_model_id, attn_impl)
     model = AutoModelForCausalLM.from_pretrained(
         base_model_id,
-        dtype=torch.bfloat16,
+        torch_dtype=torch.bfloat16,
         device_map="auto",
+        attn_implementation=attn_impl,
+        token=token,
     )
     model.config.use_cache = False
 
-    if base_adapter:
-        logger.info("Loading and merging SFT adapter: %s", base_adapter)
-        model = PeftModel.from_pretrained(model, base_adapter)
+    dapt_adapter = params.get("dapt_adapter")
+    if dapt_adapter:
+        logger.info("Merging DAPT adapter: %s", dapt_adapter)
+        model = PeftModel.from_pretrained(model, dapt_adapter, token=token)
         model = model.merge_and_unload()
+        logger.info("DAPT adapter merged into base weights")
+
+    if base_adapter:
+        logger.info("Merging SFT adapter: %s", base_adapter)
+        model = PeftModel.from_pretrained(model, base_adapter, token=token)
+        model = model.merge_and_unload()
+        logger.info("SFT adapter merged")
 
     model = prepare_model_for_kbit_training(model)
 
