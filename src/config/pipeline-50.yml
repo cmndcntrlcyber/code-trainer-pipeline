@@ -261,7 +261,7 @@ rl_training:
     dapt_adapter: ${HF_USERNAME}/qwen14b-dapt-offsec
     base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
     prompt_dataset: ${HF_USERNAME}/code-trainer-v10-grpo-prompts
-    num_generations: 3             # compromise: 2 (budget) < 3 < 4 (full)
+    num_generations: 4             # must divide generation_batch_size (bs*accum=8)
     learning_rate: 5e-7
     kl_coef: 0.1
     max_new_tokens: 768            # compromise: 512 (budget) < 768 < 1024 (full)
