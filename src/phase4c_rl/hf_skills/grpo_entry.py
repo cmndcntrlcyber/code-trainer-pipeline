@@ -198,13 +198,17 @@ def main():
         bf16=True,
         gradient_checkpointing=True,
         logging_steps=10,
-        save_steps=100,
+        save_steps=50,
         save_total_limit=2,
         num_generations=num_generations,
         max_completion_length=max_completion_length,
         beta=beta,
         report_to="wandb" if os.environ.get("WANDB_API_KEY") else "none",
         run_name="phase4c-grpo",
+        push_to_hub=True,
+        hub_model_id=output_adapter,
+        hub_token=token,
+        hub_strategy="checkpoint",
     )
 
     # ── 6. Train ──────────────────────────────────────────────────────────
