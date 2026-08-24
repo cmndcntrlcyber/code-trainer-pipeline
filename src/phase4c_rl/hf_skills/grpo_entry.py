@@ -20,7 +20,7 @@ Params JSON shape:
         "output_adapter": "cmndcntrlcyber/qwen14b-code-trainer-v10-grpo",
         "learning_rate": 5e-7,
         "num_generations": 4,
-        "kl_coef": 0.1,
+        "beta": 0.1,
         "max_new_tokens": 1024,
         "num_epochs": 1,
         "batch_size": 2,
@@ -73,7 +73,7 @@ def main():
 
     lr = float(params.get("learning_rate", 5e-7))
     num_generations = int(params.get("num_generations", 4))
-    beta = float(params.get("kl_coef", 0.04))
+    beta = float(params.get("beta", 0.04))
     max_completion_length = int(params.get("max_new_tokens", 1024))
     num_epochs = int(params.get("num_epochs", 1))
     batch_size = int(params.get("batch_size", 2))
@@ -91,7 +91,7 @@ def main():
     logger.info(f"  base_adapter:     {base_adapter or '(none)'}")
     logger.info(f"  prompt_dataset:   {prompt_dataset}")
     logger.info(f"  output_adapter:   {output_adapter}")
-    logger.info(f"  lr={lr} kl_coef={kl_coef} generations={num_generations}")
+    logger.info(f"  lr={lr} beta={beta} generations={num_generations}")
     logger.info(f"  bs={batch_size} accum={gradient_accumulation} eff={batch_size * gradient_accumulation}")
     logger.info("=" * 60)
 
@@ -232,7 +232,7 @@ def main():
         "base_adapter": base_adapter,
         "prompt_dataset": prompt_dataset,
         "learning_rate": lr,
-        "kl_coef": kl_coef,
+        "beta": beta,
         "num_generations": num_generations,
         "max_new_tokens": max_new_tokens,
         "num_epochs": num_epochs,
@@ -254,7 +254,7 @@ def main():
         folder_path=str(best_dir),
         repo_id=output_adapter,
         repo_type="model",
-        commit_message=f"Phase 4c GRPO — lr={lr} kl={kl_coef} gen={num_generations}",
+        commit_message=f"Phase 4c GRPO — lr={lr} kl={beta} gen={num_generations}",
     )
     logger.info("Adapter pushed: https://huggingface.co/%s", output_adapter)
 

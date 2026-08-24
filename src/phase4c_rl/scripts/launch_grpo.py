@@ -91,7 +91,7 @@ def main():
         "output_adapter": output_adapter,
         "learning_rate": float(grpo_cfg.get("learning_rate", 5e-7)),
         "num_generations": int(grpo_cfg.get("num_generations", 4)),
-        "kl_coef": float(grpo_cfg.get("kl_coef", 0.1)),
+        "beta": float(grpo_cfg.get("kl_coef", 0.1)),
         "max_new_tokens": int(grpo_cfg.get("max_new_tokens", 1024)),
         "num_epochs": 1,
         "batch_size": 2,
