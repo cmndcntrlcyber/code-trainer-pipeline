@@ -88,9 +88,12 @@ def main():
     if not args.dry_run and not hf_token:
         raise SystemExit("HF_TOKEN env var required to submit an HF Job")
 
+    adapter_chain = dep_cfg.get("adapter_chain", [])
+
     params = {
         "base_model": base_model,
         "adapter_repo": adapter_repo,
+        "adapter_chain": adapter_chain,
         "gguf_repo": gguf_repo,
         "quants": list(quants),
     }

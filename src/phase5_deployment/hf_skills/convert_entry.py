@@ -73,37 +73,37 @@ def _ensure_llama_cpp():
     ])
 
 
-def _merge_adapter(base_model: str, adapter_repo: str, token: str, out_dir: Path):
-    """Download base + adapter, merge in float16 on CPU, save to out_dir."""
+def _merge_adapter(base_model: str, adapter_repo: str, token: str, out_dir: Path,
+                    adapter_chain: list[str] | None = None):
+    """Download base + adapter chain, merge in float16 on CPU, save to out_dir.
+
+    adapter_chain: optional list of adapters to merge before the final adapter_repo.
+    E.g. [dapt_adapter, sft_adapter] then adapter_repo is the GRPO adapter.
+    """
     import torch
-    from huggingface_hub import snapshot_download
     from peft import PeftModel
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    adapter_dir = WORK / "adapter"
-    if not adapter_dir.exists():
-        logger.info("Downloading adapter %s", adapter_repo)
-        snapshot_download(
-            repo_id=adapter_repo, local_dir=str(adapter_dir),
-            repo_type="model", token=token,
-        )
-
     logger.info("Loading base %s in float16 on CPU", base_model)
-    base = AutoModelForCausalLM.from_pretrained(
-        base_model, dtype=torch.float16, device_map="cpu", low_cpu_mem_usage=True,
+    model = AutoModelForCausalLM.from_pretrained(
+        base_model, torch_dtype=torch.float16, device_map="cpu",
+        low_cpu_mem_usage=True, token=token,
     )
-    tokenizer = AutoTokenizer.from_pretrained(base_model)
+    tokenizer = AutoTokenizer.from_pretrained(base_model, token=token)
 
-    logger.info("Applying LoRA adapter %s", adapter_repo)
-    merged = PeftModel.from_pretrained(base, str(adapter_dir))
-    merged = merged.merge_and_unload()
+    all_adapters = list(adapter_chain or []) + [adapter_repo]
+    for adapter_id in all_adapters:
+        logger.info("Merging adapter: %s", adapter_id)
+        model = PeftModel.from_pretrained(model, adapter_id, token=token)
+        model = model.merge_and_unload()
+        logger.info("  merged %s", adapter_id)
 
     logger.info("Saving merged model to %s", out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    merged.save_pretrained(str(out_dir), safe_serialization=True)
+    model.save_pretrained(str(out_dir), safe_serialization=True)
     tokenizer.save_pretrained(str(out_dir))
 
-    del merged, base
+    del model
     gc.collect()
 
 
@@ -199,9 +199,11 @@ def main():
     # 1. Build llama.cpp (CPU-only, fast)
     _ensure_llama_cpp()
 
-    # 2. Merge LoRA → HF weights
+    # 2. Merge LoRA adapter chain → HF weights
+    adapter_chain = params.get("adapter_chain", [])
     merged_dir = WORK / "merged"
-    _merge_adapter(base_model, adapter_repo, token, merged_dir)
+    _merge_adapter(base_model, adapter_repo, token, merged_dir,
+                    adapter_chain=adapter_chain)
 
     # 3. Convert to GGUF F16
     f16_path = WORK / f"{name_stem}-merged-F16.gguf"
