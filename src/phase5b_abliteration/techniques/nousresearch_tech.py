@@ -21,7 +21,9 @@ from .base import AbliterationTechnique
 logger = logging.getLogger(__name__)
 
 HARMFUL_DATASET = "Undi95/orthogonal-activation-steering-TOXIC"
+HARMFUL_SPLIT = "test"
 HARMLESS_DATASET = "tatsu-lab/alpaca"
+HARMLESS_SPLIT = "train"
 
 
 def _load_instructions(dataset_id: str, n: int, split: str = "train") -> list[str]:
@@ -121,8 +123,8 @@ class NousResearchTechnique(AbliterationTechnique):
         model.eval()
 
         logger.info("NousResearch: loading contrastive datasets...")
-        harmful = _load_instructions(HARMFUL_DATASET, n_samples)
-        harmless = _load_instructions(HARMLESS_DATASET, n_samples)
+        harmful = _load_instructions(HARMFUL_DATASET, n_samples, split=HARMFUL_SPLIT)
+        harmless = _load_instructions(HARMLESS_DATASET, n_samples, split=HARMLESS_SPLIT)
         logger.info(
             "NousResearch: %d harmful, %d harmless instructions loaded",
             len(harmful), len(harmless),
