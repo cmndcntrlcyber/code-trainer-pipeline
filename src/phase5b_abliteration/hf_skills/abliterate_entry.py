@@ -53,7 +53,12 @@ def _install_dependencies():
     _run([
         "uv", "pip", "install", "-q",
         "--index-strategy", "unsafe-best-match",
-        "obliteratus", "abliterix", "lm-eval",
+        "obliteratus", "abliterix",
+    ])
+    _run([
+        "uv", "pip", "install", "-q",
+        "--index-strategy", "unsafe-best-match",
+        "--no-deps", "lm-eval",
     ])
 
 
