@@ -55,11 +55,6 @@ def _install_dependencies():
         "--index-strategy", "unsafe-best-match",
         "obliteratus", "abliterix", "lm-eval",
     ])
-    _run([
-        "uv", "pip", "install", "-q",
-        "--index-strategy", "unsafe-best-match",
-        "llm-abliteration @ git+https://github.com/NousResearch/llm-abliteration.git",
-    ])
 
 
 def _ensure_llama_cpp():
