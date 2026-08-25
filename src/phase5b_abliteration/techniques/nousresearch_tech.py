@@ -26,15 +26,18 @@ HARMLESS_DATASET = "tatsu-lab/alpaca"
 
 def _load_instructions(dataset_id: str, n: int, split: str = "train") -> list[str]:
     """Load instruction strings from a HF dataset."""
-    from datasets import get_dataset_split_names
     try:
-        available = get_dataset_split_names(dataset_id)
-        if split not in available:
-            split = available[0]
-            logger.info("Split 'train' not in %s, using '%s'", dataset_id, split)
-    except Exception:
-        pass
-    ds = load_dataset(dataset_id, split=split)
+        ds = load_dataset(dataset_id, split=split)
+    except ValueError:
+        for fallback in ("test", "validation"):
+            try:
+                ds = load_dataset(dataset_id, split=fallback)
+                logger.info("Split '%s' not in %s, using '%s'", split, dataset_id, fallback)
+                break
+            except ValueError:
+                continue
+        else:
+            raise
     if "instruction" in ds.column_names:
         col = "instruction"
     elif "prompt" in ds.column_names:
