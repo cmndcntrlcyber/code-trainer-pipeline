@@ -342,6 +342,9 @@ deployment:
 abliteration:
   base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
   source_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-grpo
+  adapter_chain:
+    - ${HF_USERNAME}/qwen14b-dapt-offsec
+    - ${HF_USERNAME}/qwen14b-code-trainer-v9_mixed
   output_base: ${HF_USERNAME}/qwen14b-code-trainer
 
   techniques:

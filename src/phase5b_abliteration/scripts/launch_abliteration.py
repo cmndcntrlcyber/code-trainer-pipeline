@@ -81,9 +81,12 @@ def main():
     if not args.dry_run and not hf_token:
         raise SystemExit("HF_TOKEN env var required")
 
+    adapter_chain = abl_cfg.get("adapter_chain", [])
+
     params = {
         "base_model": base_model,
         "adapter_repo": adapter_repo,
+        "adapter_chain": adapter_chain,
         "output_base": output_base,
         "techniques": techniques,
         "evaluation": eval_cfg,

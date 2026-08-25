@@ -56,8 +56,9 @@ def _install_dependencies():
         "obliteratus", "abliterix", "lm-eval",
     ])
     _run([
-        sys.executable, "-m", "pip", "install", "-q",
-        "git+https://github.com/NousResearch/llm-abliteration.git",
+        "uv", "pip", "install", "-q",
+        "--index-strategy", "unsafe-best-match",
+        "llm-abliteration @ git+https://github.com/NousResearch/llm-abliteration.git",
     ])
 
 
@@ -83,36 +84,31 @@ def _ensure_llama_cpp():
     ])
 
 
-def _merge_adapter(base_model: str, adapter_repo: str, token: str, out_dir: Path):
+def _merge_adapter(base_model: str, adapter_repo: str, token: str, out_dir: Path,
+                    adapter_chain: list[str] | None = None):
     import torch
-    from huggingface_hub import snapshot_download
     from peft import PeftModel
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    adapter_dir = WORK / "adapter"
-    if not adapter_dir.exists():
-        logger.info("Downloading adapter %s", adapter_repo)
-        snapshot_download(
-            repo_id=adapter_repo, local_dir=str(adapter_dir),
-            repo_type="model", token=token,
-        )
-
     logger.info("Loading base %s in float16 on CPU", base_model)
-    base = AutoModelForCausalLM.from_pretrained(
-        base_model, dtype=torch.float16, device_map="cpu", low_cpu_mem_usage=True,
+    model = AutoModelForCausalLM.from_pretrained(
+        base_model, torch_dtype=torch.float16, device_map="cpu",
+        low_cpu_mem_usage=True, token=token,
     )
-    tokenizer = AutoTokenizer.from_pretrained(base_model)
+    tokenizer = AutoTokenizer.from_pretrained(base_model, token=token)
 
-    logger.info("Applying LoRA adapter %s", adapter_repo)
-    merged = PeftModel.from_pretrained(base, str(adapter_dir))
-    merged = merged.merge_and_unload()
+    all_adapters = list(adapter_chain or []) + [adapter_repo]
+    for adapter_id in all_adapters:
+        logger.info("Merging adapter: %s", adapter_id)
+        model = PeftModel.from_pretrained(model, adapter_id, token=token)
+        model = model.merge_and_unload()
 
     logger.info("Saving merged model to %s", out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    merged.save_pretrained(str(out_dir), safe_serialization=True)
+    model.save_pretrained(str(out_dir), safe_serialization=True)
     tokenizer.save_pretrained(str(out_dir))
 
-    del merged, base
+    del model
     gc.collect()
 
 
@@ -204,7 +200,9 @@ def main():
     merged_dir = WORK / "merged"
     if not merged_dir.exists():
         if adapter_repo and str(adapter_repo).lower() != "null":
-            _merge_adapter(base_model, adapter_repo, token, merged_dir)
+            adapter_chain = params.get("adapter_chain", [])
+            _merge_adapter(base_model, adapter_repo, token, merged_dir,
+                            adapter_chain=adapter_chain)
         else:
             _download_base_model(base_model, token, merged_dir)
     else:
