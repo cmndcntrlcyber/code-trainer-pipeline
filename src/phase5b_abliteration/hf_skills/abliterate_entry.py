@@ -48,17 +48,18 @@ def _run(cmd, cwd=None):
 
 
 def _install_dependencies():
-    """Install abliteration technique packages (cloud-only)."""
+    """Install abliteration technique packages (cloud-only).
+
+    All packages installed with --no-deps to prevent pulling in a kernels
+    version that breaks transformers 5.7.0 (LayerRepository init error).
+    The venv already has transformers, torch, peft, datasets from uv sync.
+    """
     logger.info("Installing abliteration dependencies...")
     _run([
         "uv", "pip", "install", "-q",
         "--index-strategy", "unsafe-best-match",
-        "obliteratus", "abliterix",
-    ])
-    _run([
-        "uv", "pip", "install", "-q",
-        "--index-strategy", "unsafe-best-match",
-        "--no-deps", "lm-eval",
+        "--no-deps",
+        "obliteratus", "abliterix", "lm-eval",
     ])
 
 
