@@ -26,6 +26,8 @@ log() { echo "[pull-sessions] $*"; }
 require_deps wrangler curl python3
 validate_cf_env || exit 1
 
+PYTHON="$(readlink -f "$(command -v python3)")"
+
 mkdir -p "$DEST_DIR"
 [ -f "$MANIFEST" ] || echo '{}' > "$MANIFEST"
 
@@ -47,19 +49,19 @@ while true; do
     -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
     "$url") || { log "ERROR: R2 API request failed on page $page"; exit 1; }
 
-  python3 -c "
+  echo "$response" | "$PYTHON" -c "
 import json, sys
-data = json.loads(sys.argv[1])
+data = json.loads(sys.stdin.read())
 for obj in data.get('result', []):
     print(json.dumps({'key': obj['key'], 'etag': obj.get('etag', ''), 'size': obj.get('size', 0)}))
-" "$response" >> "$objects_file"
+" >> "$objects_file"
 
-  cursor=$(python3 -c "
+  cursor=$(echo "$response" | "$PYTHON" -c "
 import json, sys
-data = json.loads(sys.argv[1])
+data = json.loads(sys.stdin.read())
 cursor = data.get('result_info', {}).get('cursor', '') or ''
 print(cursor)
-" "$response")
+")
 
   [ -z "$cursor" ] && break
   log "  Page $page fetched, continuing..."
@@ -81,17 +83,19 @@ failed=0
 updated=0
 
 while IFS= read -r obj_json; do
-  key=$(python3 -c "import json,sys; print(json.loads(sys.argv[1])['key'])" "$obj_json")
-  etag=$(python3 -c "import json,sys; print(json.loads(sys.argv[1])['etag'])" "$obj_json")
-  size=$(python3 -c "import json,sys; print(json.loads(sys.argv[1])['size'])" "$obj_json")
+  key=$("$PYTHON" -c "import json,sys; print(json.loads(sys.argv[1])['key'])" "$obj_json")
+  etag=$("$PYTHON" -c "import json,sys; print(json.loads(sys.argv[1])['etag'])" "$obj_json")
+  size=$("$PYTHON" -c "import json,sys; print(json.loads(sys.argv[1])['size'])" "$obj_json")
 
   if should_exclude "$key"; then
     continue
   fi
 
-  cached_etag=$(python3 -c "
-import json, sys
-m = json.load(open(sys.argv[1]))
+  [ -f "$MANIFEST" ] || echo '{}' > "$MANIFEST"
+  cached_etag=$("$PYTHON" -c "
+import json, sys, os
+path = sys.argv[1]
+m = json.load(open(path)) if os.path.exists(path) else {}
 print(m.get(sys.argv[2], {}).get('etag', ''))
 " "$MANIFEST" "$key")
 
@@ -107,10 +111,10 @@ print(m.get(sys.argv[2], {}).get('etag', ''))
   [ -f "$dest_file" ] && is_update="true"
 
   if (cd /tmp && wrangler r2 object get "${R2_BUCKET}/${key}" --file "$dest_file" --remote >/dev/null 2>&1); then
-    python3 -c "
-import json, sys
+    "$PYTHON" -c "
+import json, sys, os
 manifest_path, key, etag, size = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-m = json.load(open(manifest_path))
+m = json.load(open(manifest_path)) if os.path.exists(manifest_path) else {}
 m[key] = {'etag': etag, 'size': int(size)}
 json.dump(m, open(manifest_path, 'w'), indent=2)
 " "$MANIFEST" "$key" "$etag" "$size"
