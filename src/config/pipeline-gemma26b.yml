@@ -173,7 +173,7 @@ gemma_dapt:
 #
 # REDUNDANCY: save_steps=200 with push_to_hub=True.
 
-gemma26b_finetuning:
+gemma_finetuning:
   model: "google/gemma-4-26B-A4B-it"
   dapt_adapter: ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
   hardware: "a100-large"

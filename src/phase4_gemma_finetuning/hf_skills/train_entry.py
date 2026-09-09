@@ -138,7 +138,7 @@ def main():
         device_map="auto",
     )
     model.config.use_cache = False
-    model = prepare_model_for_kbit_training(model)
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
 
     lora_cfg = LoraConfig(
         r=cfg.lora_r,

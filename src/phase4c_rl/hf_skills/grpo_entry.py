@@ -166,7 +166,7 @@ def main():
         model = model.merge_and_unload()
         logger.info("SFT adapter merged")
 
-    model = prepare_model_for_kbit_training(model)
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
 
     # Apply fresh LoRA for GRPO training.
     lora_cfg = LoraConfig(

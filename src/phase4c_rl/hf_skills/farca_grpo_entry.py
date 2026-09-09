@@ -164,7 +164,7 @@ def main():
         model = PeftModel.from_pretrained(model, base_adapter, token=token)
         model = model.merge_and_unload()
 
-    model = prepare_model_for_kbit_training(model)
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
 
     lora_cfg = LoraConfig(
         r=lora_r,
