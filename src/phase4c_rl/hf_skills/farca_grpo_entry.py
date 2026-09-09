@@ -153,8 +153,11 @@ def main():
     dapt_adapter = params.get("dapt_adapter")
     if dapt_adapter:
         logger.info("Merging DAPT adapter: %s", dapt_adapter)
-        model = PeftModel.from_pretrained(model, dapt_adapter, token=token)
-        model = model.merge_and_unload()
+        try:
+            model = PeftModel.from_pretrained(model, dapt_adapter, token=token)
+            model = model.merge_and_unload()
+        except (ValueError, OSError) as exc:
+            logger.warning("DAPT adapter not found, skipping: %s", exc)
 
     if base_adapter:
         logger.info("Merging SFT adapter: %s", base_adapter)
