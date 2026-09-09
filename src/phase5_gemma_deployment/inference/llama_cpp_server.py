@@ -3,7 +3,8 @@ phase5_gemma_deployment/inference/llama_cpp_server.py
 
 Wrapper to launch and interact with the llama.cpp HTTP server for Gemma models.
 
-Note: Gemma 4 has no system role — the generate() method uses user-only messages.
+Gemma 4 12B has no system role; Gemma 4 26B A4B supports native system role.
+The generate() method accepts an optional system_prompt parameter.
 """
 import logging
 import subprocess
@@ -67,12 +68,15 @@ class LlamaCppServer:
             self._process = None
             logger.info("Server stopped")
 
-    def generate(self, prompt: str, max_tokens: int = 1024, temperature: float = 0.1) -> str:
+    def generate(self, prompt: str, max_tokens: int = 1024, temperature: float = 0.1,
+                 system_prompt: str | None = None) -> str:
         url = f"http://localhost:{self.port}/v1/chat/completions"
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
         payload = {
-            "messages": [
-                {"role": "user", "content": prompt},
-            ],
+            "messages": messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
         }

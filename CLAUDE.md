@@ -88,6 +88,23 @@ python -m src.phase5b_abliteration.scripts.run_abliteration --technique nousrese
 bash scripts/pull_sessions_from_r2.sh
 ```
 
+**Full data sync + FARCA preparation (R2 pull → ingest → prompts → FARCA precompute):**
+```bash
+bash scripts/sync_and_prepare.sh                      # fast path: R2 sessions + RL data prep
+bash scripts/sync_and_prepare.sh --refresh-corpus      # + offsec repo scrape + DAPT corpus build
+bash scripts/sync_and_prepare.sh --full                 # everything (corpus + sessions + RL + FARCA)
+bash scripts/sync_and_prepare.sh --skip-pull            # local data only (no R2)
+bash scripts/sync_and_prepare.sh --push-to-hub          # push datasets to Hub after
+bash scripts/sync_and_prepare.sh --install-timer        # install systemd timer (every 2h)
+bash scripts/sync_and_prepare.sh --install-cron         # install cron job (every 2h)
+```
+
+**Run FARCA-GRPO training (after data prep):**
+```bash
+python -m src.phase4c_rl.scripts.launch_farca_grpo --config src/config/pipeline-50.yml --wait       # Qwen
+python -m src.phase4c_rl.scripts.launch_farca_grpo --config src/config/pipeline-gemma26b.yml --wait  # Gemma
+```
+
 **Run via Docker (Xvfb provided by entrypoint):**
 ```bash
 cd src/phase1_data_collection/docker
@@ -115,7 +132,7 @@ black .
 - Phase 3b: Infrastructure complete — DAPT on offsec corpus (`src/phase3b_dapt/`)
 - Phase 4 (Qwen): V7–V9 SFT complete — V10 pending Phase 4c RL data
 - Phase 4 (Gemma): Infrastructure complete — Gemma-4-12B-it parallel track (`src/phase4_gemma_finetuning/`)
-- Phase 4c: Infrastructure complete — GRPO + DPO scripts, reward function, session ingestion (`src/phase4c_rl/`)
+- Phase 4c: Infrastructure complete — GRPO + DPO + FARCA-GRPO scripts, reward function, session ingestion (`src/phase4c_rl/`)
 - Phase 5 (Qwen): V8 GGUF complete — Q5_K_M default (`src/phase5_deployment/`)
 - Phase 5 (Gemma): Infrastructure complete (`src/phase5_gemma_deployment/`)
 - Phase 5b: Infrastructure complete — abliteration benchmarking with baseline support (`src/phase5b_abliteration/`)

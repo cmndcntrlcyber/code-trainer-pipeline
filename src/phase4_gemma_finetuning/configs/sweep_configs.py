@@ -44,7 +44,22 @@ SWEEP_CONFIGS = [
 
 SWEEP_CONFIG_MAP = {c.name: c for c in SWEEP_CONFIGS}
 
-# LoRA target modules for Gemma-4-12B-it (same names as Qwen2.5-Coder-14B)
+SWEEP_CONFIGS_26B = [
+    SweepConfig(
+        name="v10_pipeline",
+        lora_r=32,
+        lora_alpha=64,
+        learning_rate=5e-5,
+        batch_size=1,
+        gradient_accumulation=16,
+    ),
+]
+
+SWEEP_CONFIG_MAP_26B = {c.name: c for c in SWEEP_CONFIGS_26B}
+
+# LoRA target modules — same list works for both 12B (dense) and 26B (MoE).
+# On 26B, routed expert FFN uses 3D nn.Parameter (not nn.Linear), so PEFT
+# LoRA targets only shared attention + shared MLP automatically.
 LORA_TARGET_MODULES = [
     "q_proj", "k_proj", "v_proj", "o_proj",
     "gate_proj", "up_proj", "down_proj",

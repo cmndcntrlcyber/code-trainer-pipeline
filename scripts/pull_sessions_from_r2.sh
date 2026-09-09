@@ -137,3 +137,28 @@ disk_size=$(du -sh "$DEST_DIR" 2>/dev/null | cut -f1)
 
 log "Done: ${downloaded} new, ${updated} updated, ${skipped} unchanged, ${failed} failed"
 log "Total: ${sessions} sessions from ${hosts} hosts (${disk_size})"
+
+# ── Post-pull: ingest + synthesize SFT tool-call data ──────────────────────
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+if [ "$((downloaded + updated))" -gt 0 ]; then
+  log "New/updated sessions detected — running OCO ingestion + synthesis..."
+
+  log "Step 1/2: Ingesting OCO sessions..."
+  uv run python -m src.phase4c_rl.data.ingest_oco_sessions \
+    --input-dir "$DEST_DIR" \
+    --output-dir "${PROJECT_ROOT}/data/oco_converted" \
+    --format json \
+    || { log "WARNING: OCO ingestion failed (non-fatal)"; }
+
+  log "Step 2/2: Synthesizing offsec tool-call training data..."
+  uv run python -m src.phase2_preprocessing.scripts.synthesize_offsec_tool_calls \
+    --input  "${PROJECT_ROOT}/data/oco_converted/train.jsonl" \
+    --output "${PROJECT_ROOT}/data/oco_converted/synthetic_tool_calls.jsonl" \
+    --count  2000 \
+    || { log "WARNING: Tool-call synthesis failed (non-fatal)"; }
+
+  log "Post-pull pipeline complete."
+else
+  log "No new sessions — skipping ingestion + synthesis."
+fi

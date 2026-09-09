@@ -42,8 +42,9 @@
 #   Job 2: Phase 4  SFT          → $11.20  (3.5h est / 5.5h timeout)
 #   Job 3: Phase 4  Validation   →  $0.96  (20min est / 30min timeout)
 #          ── GATE: tool_call_pass_rate >= 0.75, gsm8k >= 0.55 ──
-#   Job 4: Phase 4c GRPO         →  $6.40  (2h est / 3h timeout)
-#   Job 5: Phase 4c DPO          →  $3.20  (1h est / 1.5h timeout)
+#   Job 4:  Phase 4c GRPO         →  $6.40  (2h est / 3h timeout)
+#   Job 4b: Phase 4c FARCA-GRPO  →  $6.40  (2h est / 3h timeout)  [ALTERNATIVE to Job 4]
+#   Job 5:  Phase 4c DPO          →  $3.20  (1h est / 1.5h timeout)
 #   Job 6: Phase 4c Validation   →  $0.96  (20min est / 30min timeout)
 #          ── GATE: tool_call_pass_rate >= 0.80, agent_progress >= 4/7 ──
 #   Job 7: Phase 5  GGUF         →  $1.60  (30min est / 1h timeout)
@@ -277,6 +278,31 @@ rl_training:
     max_length: 4096               # full context for agent traces
     max_pairs: 1000                # 2x budget config
     output_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-dpo
+
+  # FARCA-GRPO: Fact-Aligned Reliability-Aware Credit Assignment
+  # Optional alternative to standard GRPO (Job 4). Same budget.
+  # Launch with: python -m src.phase4c_rl.scripts.launch_farca_grpo \
+  #     --config src/config/pipeline-50.yml --wait
+  farca_grpo:
+    base_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v9_mixed
+    dapt_adapter: ${HF_USERNAME}/qwen14b-dapt-offsec
+    base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+    prompt_dataset: ${HF_USERNAME}/code-trainer-v10-grpo-prompts
+    num_generations: 4
+    learning_rate: 5e-7
+    kl_coef: 0.1
+    max_new_tokens: 768
+    max_prompts: 500
+    output_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v11-farca
+    claim_extraction_backend: "rule_based"
+    nli_model_id: "vectara/hallucination_evaluation_model"
+    sentence_encoder_id: "all-MiniLM-L6-v2"
+    k_rel: 1
+    mu: 0.16
+    tau: 0.20
+    nli_weight: 0.4
+    rule_weight: 0.6
+    warmup_steps: 0               # no warmup needed -- Qwen14B dense model is stable
 
   # Populate before launching GRPO/DPO:
   #   data/cot_rl_sessions/htb/        — HackTheBox completed room histories

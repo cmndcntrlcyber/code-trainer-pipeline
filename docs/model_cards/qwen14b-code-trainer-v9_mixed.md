@@ -27,6 +27,11 @@ Ollama needs to parse structured tool calls.
 Part of the Code-Trainer / RTPI pipeline
 ([GitHub](https://github.com/cmndcntrlcyber/code-trainer-pipeline)).
 
+> **Status:** superseded for deployment by
+> [V10 (GRPO)](https://huggingface.co/cmndcntrlcyber/qwen14b-code-trainer-v10-grpo).
+> V9 remains the SFT foundation — the V10 adapter chain merges V9 before
+> applying GRPO reinforcement learning.
+
 ## What changed from V8
 
 1. **Increased tool-calling density** — Slice B expanded from 12K to 19K rows
@@ -99,6 +104,7 @@ Part of the Code-Trainer / RTPI pipeline
 | V7 `v7_mixed` | 28,862 | 63.8% | — | Restore tool-calling + agent |
 | V8 `v8_mixed` | 34,104 | 57.6% | 0.4837 | Fix multilingual + native format |
 | **V9 `v9_mixed` (this)** | **40,401** | **64.3%** | — | Fix tag emission + curriculum |
+| V10 `v10-grpo` | <1K prompts | 100% | — | GRPO RL on tool-call formatting |
 
 ## Intended use
 

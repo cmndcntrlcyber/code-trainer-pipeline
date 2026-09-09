@@ -35,24 +35,27 @@ logger = logging.getLogger(__name__)
 os.environ.setdefault("HF_HOME", "/workspace/.hf-cache")
 
 
-def _format_chat(example, tokenizer):
+def _format_chat(example, tokenizer, model_id=""):
     """Render the Phase 2 messages list into a single chat-templated string.
 
-    Gemma 4 does not support the system role. We merge any system message
-    into the first user message so the instruction context is preserved.
+    Gemma 4 26B A4B supports native system role; 12B does not. For 12B we
+    merge any system message into the first user message.
     """
     messages = example["messages"]
-    reformatted = []
-    system_text = ""
-    for msg in messages:
-        if msg["role"] == "system":
-            system_text = msg["content"]
-        elif msg["role"] == "user":
-            content = f"{system_text}\n\n{msg['content']}" if system_text else msg["content"]
-            reformatted.append({"role": "user", "content": content})
-            system_text = ""
-        else:
-            reformatted.append(msg)
+    if "26b" in model_id.lower():
+        reformatted = messages
+    else:
+        reformatted = []
+        system_text = ""
+        for msg in messages:
+            if msg["role"] == "system":
+                system_text = msg["content"]
+            elif msg["role"] == "user":
+                content = f"{system_text}\n\n{msg['content']}" if system_text else msg["content"]
+                reformatted.append({"role": "user", "content": content})
+                system_text = ""
+            else:
+                reformatted.append(msg)
     return {"text": tokenizer.apply_chat_template(
         reformatted, tokenize=False, add_generation_prompt=False,
     )}
@@ -123,7 +126,7 @@ def main():
         ds["validation"] = ds["validation"].select(range(n))
         logger.info(f"  validation sliced to first {n} rows (PHASE4_VAL_LIMIT)")
 
-    ds = ds.map(lambda ex: _format_chat(ex, tokenizer),
+    ds = ds.map(lambda ex: _format_chat(ex, tokenizer, model_id=model_id),
                 remove_columns=[c for c in ds["train"].column_names if c != "messages"])
     logger.info(f"  splits: {list(ds.keys())}  train={len(ds['train'])} val={len(ds['validation'])}")
 

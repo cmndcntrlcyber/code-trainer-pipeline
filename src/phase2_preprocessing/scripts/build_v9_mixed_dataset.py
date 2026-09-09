@@ -712,6 +712,9 @@ def main():
     parser.add_argument("--slice-a-size", type=int, default=8000)
     parser.add_argument("--slice-b-size", type=int, default=19000)
     parser.add_argument("--slice-b-multi", type=int, default=2000)
+    parser.add_argument("--synthetic-tool-calls", default=None,
+                        help="JSONL file of pre-synthesized offsec tool-call records "
+                             "(replaces glaive-based B+ synthesis)")
     parser.add_argument("--slice-c-size", type=int, default=10000)
     parser.add_argument("--slice-d-size", type=int, default=8000)
     parser.add_argument("--seed", type=int, default=42)
@@ -743,7 +746,21 @@ def main():
     )
 
     multi_target = args.slice_b_multi or int(v9_cfg.get("slice_b_multi", {}).get("synthetic_count", 2000))
-    records_b_multi = synthesize_multi_tool_calls(records_b, multi_target, args.seed)
+    synthetic_path = args.synthetic_tool_calls or v9_cfg.get("slice_b_multi", {}).get("synthetic_file")
+    if synthetic_path and Path(synthetic_path).exists():
+        logger.info("Loading pre-synthesized offsec tool-call records from %s", synthetic_path)
+        records_b_multi = []
+        with open(synthetic_path) as _sf:
+            for _line in _sf:
+                _rec = json.loads(_line)
+                records_b_multi.append(_rec)
+        if multi_target and len(records_b_multi) > multi_target:
+            random.seed(args.seed)
+            random.shuffle(records_b_multi)
+            records_b_multi = records_b_multi[:multi_target]
+        logger.info("  Loaded %d offsec synthetic records (target: %d)", len(records_b_multi), multi_target)
+    else:
+        records_b_multi = synthesize_multi_tool_calls(records_b, multi_target, args.seed)
 
     records_c = load_slice_c(
         v9_cfg.get("slice_c", {}).get("source", "greghavens/fable-5-coding-and-debugging-traces"),

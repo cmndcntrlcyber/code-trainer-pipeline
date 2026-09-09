@@ -1,0 +1,488 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  $67 FULL PIPELINE RUN — Gemma-4-26B-A4B-it, with Redundancy   ║
+# ║  Budget: $67.00 @ $3.20/hr = 20.9h A100-large                  ║
+# ║                                                                  ║
+# ║  Allocated:    $50.40 (15.75h) across 8 jobs                    ║
+# ║  Contingency:  $ 9.60 ( 3.0h) retry budget for failed phases   ║
+# ║  Reserve:      $ 7.00 ( 2.2h) unallocated headroom             ║
+# ╚══════════════════════════════════════════════════════════════════╝
+#
+# MODEL: google/gemma-4-26B-A4B-it (MoE)
+#   - 25.8B total params, 3.8B active (128 experts + 1 shared, 8 active/layer)
+#   - 30 layers (25 sliding window @ 1024 + 5 full attention)
+#   - 256K context, 262K vocab, native system prompt support
+#   - BF16 model size: ~52 GB (vs Qwen 14B's ~28 GB)
+#   - Apache 2.0 license
+#
+# MoE TRAINING NOTES:
+#   - Routed expert FFN uses 3D nn.Parameter tensors — PEFT LoRA cannot
+#     target them. The standard 7-module target list (q/k/v/o/gate/up/down_proj)
+#     hits only shared attention + shared MLP. This is the optimal tradeoff.
+#   - All learning rates halved vs Qwen pipeline — MoE routing is sensitive
+#     to aggressive weight updates.
+#   - DPO uses ref_model=None (PEFT implicit mode) because two 52 GB copies
+#     exceed A100 80 GB. DPOTrainer automatically disables LoRA for reference
+#     forward passes.
+#
+# REDUNDANCY MEASURES (inherited from Qwen pipeline-50):
+#
+#   1. TIMEOUT HEADROOM — every timeout_seconds is 150% of estimated runtime.
+#   2. MID-RUN HUB PUSH — save_steps=200 pushes adapters to Hub during training.
+#   3. VALIDATION GATES — eval jobs between phases; if SFT fails gate, RL skipped.
+#   4. INDEPENDENT JOBS — each phase is a separate HF Jobs submission.
+#   5. CONSERVATIVE HYPERPARAMS — halved LRs from Qwen's proven V8/V9 configs.
+#   6. Q4_K_M + IQ4_XS — dual quant for RTX 5060 Ti 16 GB (partial offload + fallback).
+#   7. CHECKPOINT EVERY 200 STEPS — enables resume without full re-run.
+#   8. CURRICULUM TRAINING — 80/20 split (full data / tool-call polish).
+#
+# INFERENCE TARGET: RTX 5060 Ti 16 GB
+#   - Q4_K_M (~14.5 GB): n_gpu_layers=28/30, 2 layers on CPU, ctx_size=4096
+#   - IQ4_XS (~13 GB): n_gpu_layers=-1 (all on GPU), ctx_size=4096
+#   - Google's QAT Q4_0 GGUF (14.4 GB) available as a comparison baseline
+#
+# RUN ORDER (sequential, with gates):
+#
+#   Job 1: Phase 3b DAPT         →  $6.40  (2.0h est / 3.0h timeout)
+#   Job 2: Phase 4  SFT          → $16.00  (5.0h est / 7.5h timeout)
+#   Job 3: Phase 4  Validation   →  $1.60  (30min est / 45min timeout)
+#          ── GATE: tool_call_pass_rate >= 0.75, gsm8k >= 0.50 ──
+#   Job 4:  Phase 4c GRPO         →  $9.60  (3.0h est / 4.5h timeout)
+#   Job 4b: Phase 4c FARCA-GRPO  →  $9.60  (3.0h est / 4.5h timeout)  [ALTERNATIVE to Job 4]
+#   Job 5:  Phase 4c DPO          →  $4.80  (1.5h est / 2.25h timeout)
+#   Job 6: Phase 4c Validation   →  $1.60  (30min est / 45min timeout)
+#          ── GATE: tool_call_pass_rate >= 0.80, agent_progress >= 4/7 ──
+#   Job 7: Phase 5  GGUF         →  $2.40  (45min est / 67min timeout)
+#   Job 8: Phase 5b Abliteration →  $8.00  (2.5h est / 3.75h timeout)
+#
+# COST COMPARISON vs Qwen pipeline-50:
+#   Allocated: $50.40 vs $33.92 (1.49x) — driven by 52 GB model download,
+#   higher memory bandwidth demand, and gradient checkpointing overhead.
+#   Total:     $67.00 vs $50.00 (1.34x)
+#
+# USAGE:
+#   set -a && source .env && set +a
+#   python -m src.phase3b_dapt.scripts.launch_dapt \
+#       --config src/config/pipeline-gemma26b.yml --wait
+#   # ... then each subsequent phase after gate passes
+
+# ─── Phase 1/2: Data (already complete, paths only) ─────────────
+
+data_collection:
+  github_token: ${GITHUB_TOKEN}
+  repos_dir: ./data/sample-data/repositories
+  captures_dir: ./data/sample-data/captures
+  catalog_db: ./data/catalog.db
+  repos_per_language: 500
+  min_quality_score: 30
+  languages:
+    - Python
+    - JavaScript
+    - TypeScript
+    - Java
+    - Go
+    - Rust
+    - C++
+    - C#
+  capture_workers: 8
+  viewport_width: 2560
+  viewport_height: 1440
+  font_size: 14
+  theme: "Default Dark+"
+
+preprocessing:
+  dataset_name: cmndcntrlcyber/code-trainer-offsec-dataset
+  max_code_length: 8192
+  train_split: 0.8
+  val_split: 0.1
+  test_split: 0.1
+  private: true
+  image_max_dim: 1024
+  multimodal_revision: "v2-multimodal"
+
+v9_mixed:
+  dataset_name: cmndcntrlcyber/code-trainer-v9-mixed
+  slice_a:
+    source: cmndcntrlcyber/code-trainer-offsec-dataset
+    subsample: 8000
+  slice_b:
+    source: glaiveai/glaive-function-calling-v2
+    max_rows: 19000
+  slice_b_multi:
+    synthetic_count: 2000
+  slice_c:
+    source: greghavens/fable-5-coding-and-debugging-traces
+    max_rows: 10000
+  slice_d:
+    source: teknium/OpenHermes-2.5
+    max_rows: 8000
+  val_split: 0.1
+  seed: 42
+  private: false
+
+# ─── Job 1: Phase 3b DAPT — $6.40 (2.0h est / 3.0h timeout) ────
+#
+# Domain-adaptive continued pretraining on offsec code corpus.
+# 10K documents (~30M tokens) at seq_len=2048 for 1 epoch.
+#
+# MoE NOTE: DAPT adapts shared MLP + attention via LoRA but cannot
+# touch the routed experts (3D nn.Parameter). Domain vocabulary is
+# still injected through attention/embedding layers.
+#
+# REDUNDANCY: Checkpoints every 200 steps. HF cache at
+# /workspace/.hf-cache persists the 52 GB base model download
+# across retries within a single job.
+
+gemma_dapt:
+  base_model: "google/gemma-4-26B-A4B-it"
+  corpus_dirs:
+    - data/offensive-security/repositories
+  max_seq_length: 2048
+  lora_r: 32
+  lora_alpha: 64
+  lora_dropout: 0.05
+  learning_rate: 2.5e-5            # halved from Qwen's 5e-5 — MoE routing stability
+  num_epochs: 1
+  min_lines: 10
+  max_lines: 1000
+  max_documents: 10000             # 10K rows — ~$6.40 (~2h runtime)
+  output_adapter: ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-phase3b-gemma26b-dapt"
+    timeout_seconds: 10800         # 3h — 150% of 2h estimate
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+
+# ─── Job 2: Phase 4 SFT — $16.00 (5.0h est / 7.5h timeout) ─────
+#
+# V10 curriculum training: 80% full mixed data, 20% tool-call polish.
+# 12K rows at seq_len=4096, 1 epoch.
+#
+# VRAM BUDGET (A100 80 GB):
+#   Model BF16:   ~52 GB
+#   LoRA (r=32):  ~80 MB (shared attn + shared MLP only)
+#   Optimizer:    ~320 MB (AdamW fp32 states)
+#   Activations:  ~5-8 GB (bs=1, grad_ckpt, 25/30 layers use 1024 sliding window)
+#   Total:        ~58-61 GB — ~19-22 GB headroom
+#
+# WHY 12K rows (vs Qwen's 15K): Larger model download (~52 GB vs ~28 GB)
+# and slower per-step throughput (memory-bandwidth bound on 26B weights)
+# mean 12K rows fills the 7.5h timeout safely.
+#
+# REDUNDANCY: save_steps=200 with push_to_hub=True.
+
+gemma26b_finetuning:
+  model: "google/gemma-4-26B-A4B-it"
+  dapt_adapter: ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
+  hardware: "a100-large"
+  dataset_id: "cmndcntrlcyber/code-trainer-v9-mixed"
+  dataset_revision: "main"
+  num_epochs_sweep: 1
+  max_seq_length: 4096             # full context — no compromise
+  train_limit: 12000               # 12K rows — ~5h at 4096 seq_len (reduced from Qwen's 15K)
+
+  validation_sweep:
+    - name: v10_pipeline
+      lora_r: 32                   # proven ratio (V6's r=64 caused collapse on Qwen — staying conservative)
+      lora_alpha: 64
+      lora_dropout: 0.05
+      learning_rate: 5e-5          # halved from Qwen's 1e-4 — MoE needs gentler LR
+      batch_size: 1                # bs=1 required — 52 GB model leaves ~25 GB for activations
+      gradient_accumulation: 16    # effective batch = 16
+      max_seq_length: 4096
+      dataset_id: "cmndcntrlcyber/code-trainer-v9-mixed"
+      dataset_revision: "main"
+
+  full_training:
+    num_epochs: 1
+    top_n_configs: 1
+
+  output_base: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer
+
+  # VALIDATION GATE (Job 3) — thresholds adjusted for MoE architecture.
+  # 3.8B active params per forward pass means different loss/benchmark
+  # characteristics vs dense 14B. gsm8k relaxed to 0.50; eval_loss to 0.60.
+  v7_validation:
+    eval_loss_threshold: 0.60      # relaxed — MoE loss landscape differs from dense
+    tool_call_pass_rate: 0.75      # gate: must pass 75% of tool-call scenarios
+    tool_call_scenarios: 14        # V10 eval has 14 scenarios
+    agent_progress_threshold: 3
+    agent_scenarios: 7
+    gsm8k_threshold: 0.50         # relaxed — 3.8B active params, different baseline
+
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-phase4-gemma4-26b"
+    adapter_base: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer
+    timeout_seconds: 27000         # 7.5h — 150% of 5h estimate (12K rows + DAPT merge overhead)
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+    benchmark:
+      task: "gsm8k"
+      num_fewshot: 0
+      batch_size: 8                # reduced from 16 — larger model per batch
+      timeout_seconds: 2700        # 45min — 150% of 30min estimate
+      wait_timeout_seconds: 5400
+
+# ─── Vision Model (reference — not in this pipeline run) ─────────
+
+vision_model:
+  device_profile: "a100"
+  vision_encoder: "microsoft/swin-base-patch4-window7-224"
+  decoder: "Qwen/Qwen2.5-Coder-1.5B-Instruct"
+  dataset_id: "cmndcntrlcyber/code-trainer-offsec-dataset"
+  dataset_revision: "v2-multimodal"
+  batch_size: 8
+  gradient_accumulation: 4
+  learning_rate: 2e-4
+  num_epochs: 3
+  max_seq_length: 2048
+  compute_dtype: "bfloat16"
+  gradient_checkpointing: true
+  use_8bit_optimizer: false
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  output_dir: ./models/vision_model
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-phase3-vision"
+    adapter_repo: ${HF_USERNAME}/code-trainer-vision-adapter
+    timeout_seconds: 36000
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+
+# ─── Jobs 4-5: Phase 4c RL — $14.40 (4.5h est / 6.75h timeout) ──
+#
+# GRPO then DPO as SEPARATE jobs (not combined).
+#
+# GRPO: 4 generations, 400 prompts, max_new_tokens=768.
+# DPO: 800 preference pairs from OCO sessions.
+#
+# DPO CRITICAL: ref_model_strategy=peft_implicit. The standard approach
+# loads two full model copies for DPO (policy + reference). At 52 GB each,
+# that's 104 GB — exceeds A100 80 GB. With ref_model=None, DPOTrainer
+# automatically disables LoRA for reference forward passes (single copy).
+#
+# Session data must be in data/cot_rl_sessions/ before launching.
+
+rl_training:
+  grpo:
+    base_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v9_mixed
+    dapt_adapter: ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
+    base_model: "google/gemma-4-26B-A4B-it"
+    prompt_dataset: ${HF_USERNAME}/code-trainer-v10-grpo-prompts
+    num_generations: 4             # must divide generation_batch_size
+    learning_rate: 2.5e-7          # halved from Qwen's 5e-7 — MoE stability
+    kl_coef: 0.1
+    max_new_tokens: 768
+    max_prompts: 400               # reduced from 500 — budget constraint
+    output_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-grpo
+
+  dpo:
+    base_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-grpo
+    base_model: "google/gemma-4-26B-A4B-it"
+    preference_dataset: ${HF_USERNAME}/code-trainer-v10-dpo-pairs
+    beta: 0.1
+    learning_rate: 5e-7            # halved from Qwen's 1e-6
+    max_length: 4096               # full context for agent traces
+    max_pairs: 800                 # reduced from 1000 — budget + VRAM constraint
+    ref_model_strategy: "peft_implicit"  # ref_model=None — PEFT handles it
+    output_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-dpo
+
+  # FARCA-GRPO: Fact-Aligned Reliability-Aware Credit Assignment
+  # Optional alternative to standard GRPO (Job 4). Same budget.
+  #
+  # MoE FARCA NOTES:
+  #   - Halved LR (2.5e-7) inherited from Gemma GRPO -- MoE routing stability
+  #   - warmup_steps=50: ramp FARCA advantage mixing from 0->1 over first 50 steps.
+  #     MoE routing is sensitive to advantage variance spikes.
+  #   - VRAM: HHEM (550MB) + sentence encoder (80MB) = +630MB. Fits in ~19GB headroom.
+  #
+  # Launch with: python -m src.phase4c_rl.scripts.launch_farca_grpo \
+  #     --config src/config/pipeline-gemma26b.yml --wait
+  farca_grpo:
+    base_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v9_mixed
+    dapt_adapter: ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
+    base_model: "google/gemma-4-26B-A4B-it"
+    prompt_dataset: ${HF_USERNAME}/code-trainer-v10-grpo-prompts
+    num_generations: 4
+    learning_rate: 2.5e-7            # halved from Qwen's 5e-7 -- MoE routing stability
+    kl_coef: 0.1
+    max_new_tokens: 768
+    max_prompts: 400                 # reduced from 500 -- budget constraint
+    output_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v11-farca
+    claim_extraction_backend: "rule_based"
+    nli_model_id: "vectara/hallucination_evaluation_model"
+    sentence_encoder_id: "all-MiniLM-L6-v2"
+    k_rel: 1
+    mu: 0.16
+    tau: 0.20
+    nli_weight: 0.4
+    rule_weight: 0.6
+    warmup_steps: 50                 # REQUIRED for MoE -- ramp FARCA mixing 0->1
+
+  session_data_dir: data/cot_rl_sessions
+
+  # POST-RL VALIDATION GATE (Job 6) — tighter than SFT gate.
+  v10_validation:
+    eval_loss_threshold: 0.60
+    tool_call_pass_rate: 0.80      # tighter gate: must beat SFT's 0.75
+    tool_call_scenarios: 14
+    agent_progress_threshold: 4    # must solve 4/7 agent scenarios
+    agent_scenarios: 7
+    gsm8k_threshold: 0.50
+
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-phase4c-gemma26b-rl"
+    timeout_seconds: 16200         # 4.5h — 150% of 3h GRPO estimate
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+
+# ─── Job 7: Phase 5 GGUF — $2.40 (45min est / 67min timeout) ────
+#
+# Q4_K_M primary + IQ4_XS fallback. Q5_K_M excluded: ~18 GB doesn't
+# fit RTX 5060 Ti 16 GB even with partial offload.
+#
+# Q4_K_M (~14.5 GB): 28/30 layers on GPU, 2 on CPU. ~15-25 tok/s gen.
+# IQ4_XS (~13 GB): all 30 layers on GPU, ctx_size=4096. Fully resident.
+#
+# Merge chain: DAPT → SFT → GRPO adapters merged sequentially into base.
+# Peak disk: ~156 GB (52 GB cache + 52 GB merged + 52 GB F16 GGUF).
+# A100-large has ~200+ GB workspace — fits with cleanup between steps.
+
+deployment:
+  quantization: "Q4_K_M"
+  context_length: 4096
+  port: 8080
+  gguf_repo: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-gguf
+  source_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-grpo
+  adapter_chain:
+    - ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
+    - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v9_mixed
+  base_model: "google/gemma-4-26B-A4B-it"
+  cloud:
+    hardware: "a100-large"
+    timeout_seconds: 4050          # 67.5min — 150% of 45min estimate
+    wait_timeout_seconds: 7200
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+    quants:
+      - "Q4_K_M"                   # primary: ~14.5 GB, partial GPU offload
+      - "IQ4_XS"                   # fallback: ~13 GB, fully GPU-resident
+
+# ─── Job 8: Phase 5b Abliteration — $8.00 (2.5h est / 3.75h timeout) ─
+#
+# 2 techniques (nousresearch + obliteratus). abliterix excluded for budget.
+# 2 benchmarks (gsm8k + mmlu). Batch size reduced to 8 (vs Qwen's 16).
+
+abliteration:
+  base_model: "google/gemma-4-26B-A4B-it"
+  source_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-grpo
+  adapter_chain:
+    - ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
+    - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v9_mixed
+  output_base: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer
+
+  techniques:
+    - name: nousresearch           # fastest — no Optuna, pure matrix projection
+      method: biprojected
+      n_samples: 512
+      quantization: null
+    - name: obliteratus            # second technique for comparison
+      preset: advanced
+      n_directions: 4
+      norm_preserve: true
+
+  evaluation:
+    harmful_dataset: "Undi95/orthogonal-activation-steering-TOXIC"
+    harmless_dataset: "tatsu-lab/alpaca"
+    n_eval_samples: 200
+    benchmark_tasks:
+      - gsm8k
+      - mmlu
+    num_fewshot: 0
+    batch_size: 8                  # reduced from 16 — larger model per batch
+
+  cloud:
+    hardware: "a100-large"
+    timeout_seconds: 13500         # 3.75h — 150% of 2.5h estimate
+    wait_timeout_seconds: 18000
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+    quants:
+      - "Q4_K_M"                   # match deployment quant
+
+# ─── RLAIF + PPO (NOT in $67 run — future phases) ───────────────
+
+rlaif:
+  policy_model: "google/gemma-4-26B-A4B-it"
+  policy_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-dpo
+  reward_model_base: "Qwen/Qwen2.5-Coder-1.5B-Instruct"
+  reward_model_output: ${HF_USERNAME}/code-trainer-reward-model
+  preference_dataset: ${HF_USERNAME}/code-trainer-rlaif-preferences
+  n_preference_pairs: 8000
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-phase4e-gemma26b-rlaif"
+    timeout_seconds: 14400
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+
+ppo_training:
+  policy_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-dpo
+  base_model: "google/gemma-4-26B-A4B-it"
+  reward_model: ${HF_USERNAME}/code-trainer-reward-model
+  learning_rate: 5e-7              # halved from Qwen's 1e-6
+  kl_target: 0.05
+  clip_range: 0.2
+  batch_size: 1                    # bs=1 required for 52 GB model
+  ppo_epochs: 2
+  output_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-ppo
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-phase4f-gemma26b-ppo"
+    timeout_seconds: 36000
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+
+# ─── CONTINGENCY PLAN ───────────────────────────────────────────
+#
+# $9.60 (3h) reserved for retries. Priority order if a job fails:
+#
+#   1. Re-run SFT with --train-limit 8000 (saves ~2h, $6.40)
+#   2. Re-run GRPO with max_prompts=200 (saves ~1.5h, $4.80)
+#   3. Re-run DPO with max_pairs=400 (saves ~0.5h, $1.60)
+#   4. Skip abliteration entirely — GGUF is the deployable artifact
+#   5. Drop DAPT entirely — saves $6.40 (recoup for retry budget)
+#
+# FARCA FALLBACK: If FARCA-GRPO training is unstable:
+#   - Increase warmup_steps from 50 to 100 (gentler transition)
+#   - Fall back to standard GRPO (Job 4) -- zero FARCA overhead
+#
+# FALLBACK: If SFT validation gate fails (tool_call < 0.75):
+#   - Re-run with lower learning_rate: 2.5e-5 (gentler on MoE routing)
+#   - Re-run with train_limit: 8000 + lora_r: 16 (less overwriting)
+#   - These fallback configs cost ~$10 each, fitting in contingency
+#
+# VRAM OOM FALLBACK:
+#   - Switch to attention-only LoRA: target_modules=["q_proj","k_proj","v_proj","o_proj"]
+#   - Removes shared MLP from LoRA, saving ~40% trainable params
+#   - Reduces activation memory, may enable bs=2

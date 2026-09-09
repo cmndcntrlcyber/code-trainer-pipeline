@@ -153,10 +153,18 @@ def main():
     model = get_peft_model(model, lora_cfg)
     model.print_trainable_parameters()
 
-    # ── 4. Reference model (frozen copy) ─────────────────────────────────
-    logger.info("Loading reference model for DPO (frozen)")
-    ref_model = _load_and_merge_base()
-    ref_model.eval()
+    # ── 4. Reference model ──────────────────────────────────────────────
+    ref_model_strategy = params.get("ref_model_strategy", "explicit")
+    if ref_model_strategy == "peft_implicit":
+        # PEFT implicit mode: DPOTrainer disables LoRA for reference forward
+        # passes. Essential for large models (e.g. Gemma 26B at 52 GB) where
+        # two full copies exceed A100 80 GB.
+        logger.info("Using PEFT implicit ref_model (ref_model=None)")
+        ref_model = None
+    else:
+        logger.info("Loading reference model for DPO (frozen)")
+        ref_model = _load_and_merge_base()
+        ref_model.eval()
 
     # ── 5. Training config ────────────────────────────────────────────────
     wandb_mode = os.environ.get("WANDB_MODE")

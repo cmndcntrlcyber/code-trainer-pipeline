@@ -456,6 +456,27 @@ rl_training:
     learning_rate: 1e-6
     max_length: 4096
     output_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-dpo
+  # FARCA-GRPO: Fact-Aligned Reliability-Aware Credit Assignment
+  # Per-token advantage reshaping via factual claim verification.
+  # Launch with: python -m src.phase4c_rl.scripts.launch_farca_grpo --config src/config/config.yaml --wait
+  farca_grpo:
+    base_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v10-grpo
+    base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+    prompt_dataset: ${HF_USERNAME}/code-trainer-v10-grpo-prompts
+    output_adapter: ${HF_USERNAME}/qwen14b-code-trainer-v11-farca
+    num_generations: 4
+    learning_rate: 5e-7
+    kl_coef: 0.1
+    max_new_tokens: 1024
+    claim_extraction_backend: "rule_based"
+    nli_model_id: "vectara/hallucination_evaluation_model"
+    sentence_encoder_id: "all-MiniLM-L6-v2"
+    k_rel: 1
+    mu: 0.16
+    tau: 0.20
+    nli_weight: 0.4
+    rule_weight: 0.6
+    warmup_steps: 0
   v10_validation:
     eval_loss_threshold: 0.50
     tool_call_pass_rate: 0.85

@@ -6,6 +6,7 @@ tags:
 - llama-cpp
 - quantized
 - code-generation
+- tool-calling
 - qwen2.5-coder
 - code-trainer
 pipeline_tag: text-generation
@@ -13,14 +14,16 @@ pipeline_tag: text-generation
 
 # qwen14b-code-trainer-gguf
 
-GGUF quantizations of the Code-Trainer fine-tuned model. The current source
-adapter [`qwen14b-code-trainer-v8_mixed`](https://huggingface.co/cmndcntrlcyber/qwen14b-code-trainer-v8_mixed)
-(or the latest versioned adapter) is merged into
+GGUF quantizations of the Code-Trainer fine-tuned model. The full adapter chain
+— DAPT ([`qwen14b-dapt-offsec`](https://huggingface.co/cmndcntrlcyber/qwen14b-dapt-offsec)),
+V9 SFT ([`qwen14b-code-trainer-v9_mixed`](https://huggingface.co/cmndcntrlcyber/qwen14b-code-trainer-v9_mixed)),
+and V10 GRPO ([`qwen14b-code-trainer-v10-grpo`](https://huggingface.co/cmndcntrlcyber/qwen14b-code-trainer-v10-grpo))
+— is merged into
 [`Qwen/Qwen2.5-Coder-14B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-Coder-14B-Instruct)
 and quantized via [llama.cpp](https://github.com/ggerganov/llama.cpp).
 
 This is **Phase 5** of the
-[Code-Trainer / RTPI](https://github.com/cmndcntrlcyber/code-trainer-offsec-pipeline)
+[Code-Trainer / RTPI](https://github.com/cmndcntrlcyber/code-trainer-pipeline)
 pipeline. The conversion runs as an HF Job on `a100-large` — the GPU sits
 idle, we use that flavor only for its 144 GB system RAM during the float16
 merge step.
@@ -47,23 +50,34 @@ Additional quantizations (Q8_0, F16) can be produced by passing
 
 ## Source
 
+The GGUF is produced by merging the full adapter chain in order, then
+quantizing the merged model:
+
+```
+Qwen/Qwen2.5-Coder-14B-Instruct
+  → merge DAPT LoRA    (qwen14b-dapt-offsec)
+  → merge V9 SFT LoRA  (qwen14b-code-trainer-v9_mixed)
+  → merge V10 GRPO LoRA (qwen14b-code-trainer-v10-grpo)
+  → convert_hf_to_gguf.py + llama-quantize → Q5_K_M
+```
+
 | Stage | Repo / artifact |
 |---|---|
 | Base model | [`Qwen/Qwen2.5-Coder-14B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-Coder-14B-Instruct) |
-| LoRA adapter (current) | [`cmndcntrlcyber/qwen14b-code-trainer-v8_mixed`](https://huggingface.co/cmndcntrlcyber/qwen14b-code-trainer-v8_mixed) |
-| LoRA adapter (original) | [`cmndcntrlcyber/qwen14b-code-trainer-aggressive`](https://huggingface.co/cmndcntrlcyber/qwen14b-code-trainer-aggressive) |
+| DAPT adapter | [`cmndcntrlcyber/qwen14b-dapt-offsec`](https://huggingface.co/cmndcntrlcyber/qwen14b-dapt-offsec) |
+| SFT adapter (V9) | [`cmndcntrlcyber/qwen14b-code-trainer-v9_mixed`](https://huggingface.co/cmndcntrlcyber/qwen14b-code-trainer-v9_mixed) |
+| GRPO adapter (V10) | [`cmndcntrlcyber/qwen14b-code-trainer-v10-grpo`](https://huggingface.co/cmndcntrlcyber/qwen14b-code-trainer-v10-grpo) |
 | Converter | `llama.cpp` (`convert_hf_to_gguf.py` + `llama-quantize`) |
 | Conversion runtime | HF Job, `a100-large`, ~1 h on the merge + quantize path |
 
 ## Evaluation
 
-Quality is inherited from the source LoRA adapter. Current source is V8
-(eval_loss = 0.4837 on 3,789-row validation split — see the
-[V8 model card](https://huggingface.co/cmndcntrlcyber/qwen14b-code-trainer-v8_mixed#evaluation)).
-Previous source was the V6 `aggressive` adapter (eval_loss = 0.4724 — see the
-[V6 model card](https://huggingface.co/cmndcntrlcyber/qwen14b-code-trainer-aggressive#evaluation)).
-V8's slightly higher eval_loss reflects the broader training distribution
-(code + tool-calling + agent + instruction) vs. V6's code-only focus.
+Quality is inherited from the source adapter chain. The current source is V10
+GRPO — an RL-tuned adapter trained on a rule-based tool-call formatting reward
+(mean reward ~0.14, see the
+[V10 model card](https://huggingface.co/cmndcntrlcyber/qwen14b-code-trainer-v10-grpo#training-metrics)).
+The SFT foundation is V9 (40,401-row curriculum dataset, 64.3% tool coverage —
+see the [V9 model card](https://huggingface.co/cmndcntrlcyber/qwen14b-code-trainer-v9_mixed#evaluation)).
 Quantization to Q5_K_M typically introduces minimal perplexity penalty
 (< 1 %) for 14 B models; Q4_K_M introduces ~1–3 %.
 
@@ -130,6 +144,7 @@ python -m src.phase5_deployment.scripts.launch_convert \
     --config src/config/config.yaml --wait
 ```
 
-* **Code:** [github.com/cmndcntrlcyber/code-trainer-offsec-pipeline](https://github.com/cmndcntrlcyber/code-trainer-offsec-pipeline)
+* **Code:** [github.com/cmndcntrlcyber/code-trainer-pipeline](https://github.com/cmndcntrlcyber/code-trainer-pipeline)
   (`src/phase5_deployment/`)
+* **Config:** `src/config/pipeline-50.yml` (deployment section)
 * **Cost:** ~$2 on `a100-large` once the job runs.

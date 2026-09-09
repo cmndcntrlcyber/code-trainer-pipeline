@@ -60,7 +60,7 @@ def main():
     args = parser.parse_args()
 
     config = load_config(args.config)
-    dapt_cfg = config.get("dapt", {})
+    dapt_cfg = config.get("dapt") or config.get("gemma_dapt") or {}
     cloud_cfg = dapt_cfg.get("cloud", {})
 
     base_model = dapt_cfg.get("base_model", "Qwen/Qwen2.5-Coder-14B-Instruct")
