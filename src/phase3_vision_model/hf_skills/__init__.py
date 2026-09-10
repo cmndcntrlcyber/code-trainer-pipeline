@@ -51,21 +51,28 @@ def wait_for_job(
     token: str,
     poll_interval: int = 60,
     timeout: int = 36000,
-    max_retries: int = 5,
+    max_retries: int = 30,
 ) -> str:
-    """Block until a job leaves RUNNING. Returns final JobStage value (e.g. 'COMPLETED')."""
+    """Block until a job leaves RUNNING. Returns final JobStage value (e.g. 'COMPLETED').
+
+    Network errors pause the timeout clock so transient outages don't
+    cancel a healthy remote job.
+    """
     api = HfApi(token=token)
     terminal = {JobStage.COMPLETED.value, JobStage.CANCELED.value,
                 JobStage.ERROR.value, JobStage.DELETED.value}
     start = time.time()
+    dead_time = 0.0
     consecutive_errors = 0
     while True:
+        poll_start = time.time()
         try:
             info = api.inspect_job(job_id=job_id)
             stage = info.status.stage if info.status else "UNKNOWN"
             consecutive_errors = 0
         except (OSError, Exception) as e:
             consecutive_errors += 1
+            dead_time += time.time() - poll_start
             if consecutive_errors > max_retries:
                 logger.error(f"Job {job_id}: {consecutive_errors} consecutive poll failures, giving up: {e}")
                 raise
@@ -82,8 +89,9 @@ def wait_for_job(
                 except Exception as e:
                     logger.error(f"Could not fetch logs: {e}")
             return stage
-        if time.time() - start > timeout:
-            logger.error(f"Job {job_id} exceeded {timeout}s; cancelling")
+        elapsed = (time.time() - start) - dead_time
+        if elapsed > timeout:
+            logger.error(f"Job {job_id} exceeded {timeout}s (elapsed={elapsed:.0f}s, dead_time={dead_time:.0f}s); cancelling")
             api.cancel_job(job_id=job_id)
             return "TIMEOUT"
         time.sleep(poll_interval)
