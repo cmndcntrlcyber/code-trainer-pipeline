@@ -274,7 +274,7 @@ vision_model:
 
 rl_training:
   grpo:
-    base_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v9_mixed
+    base_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-aggressive-full1
     dapt_adapter: ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
     base_model: "google/gemma-4-26B-A4B-it"
     prompt_dataset: ${HF_USERNAME}/code-trainer-v10-grpo-prompts
@@ -308,7 +308,7 @@ rl_training:
   # Launch with: python -m src.phase4c_rl.scripts.launch_farca_grpo \
   #     --config src/config/pipeline-gemma26b.yml --wait
   farca_grpo:
-    base_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v9_mixed
+    base_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-aggressive-full1
     dapt_adapter: ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
     base_model: "google/gemma-4-26B-A4B-it"
     prompt_dataset: ${HF_USERNAME}/code-trainer-v10-grpo-prompts
@@ -368,7 +368,7 @@ deployment:
   source_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-grpo
   adapter_chain:
     - ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
-    - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v9_mixed
+    - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-aggressive-full1
   base_model: "google/gemma-4-26B-A4B-it"
   cloud:
     hardware: "a100-large"
@@ -392,7 +392,7 @@ abliteration:
   source_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-grpo
   adapter_chain:
     - ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
-    - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v9_mixed
+    - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-aggressive-full1
   output_base: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer
 
   techniques:
