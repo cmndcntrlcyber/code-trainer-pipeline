@@ -283,10 +283,10 @@ rl_training:
     kl_coef: 0.1
     max_new_tokens: 768
     max_prompts: 400               # reduced from 500 — budget constraint
-    output_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-grpo
+    output_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v11-farca
 
   dpo:
-    base_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-grpo
+    base_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v11-farca
     base_model: "google/gemma-4-26B-A4B-it"
     preference_dataset: ${HF_USERNAME}/code-trainer-v10-dpo-pairs
     beta: 0.1
@@ -365,7 +365,7 @@ deployment:
   context_length: 4096
   port: 8080
   gguf_repo: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-gguf
-  source_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-grpo
+  source_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v11-farca
   adapter_chain:
     - ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
     - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-aggressive-full1
@@ -389,7 +389,7 @@ deployment:
 
 abliteration:
   base_model: "google/gemma-4-26B-A4B-it"
-  source_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-grpo
+  source_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v11-farca
   adapter_chain:
     - ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
     - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-aggressive-full1
