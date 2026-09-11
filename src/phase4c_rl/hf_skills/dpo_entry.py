@@ -126,10 +126,26 @@ def main():
             attn_implementation=attn_impl,
             token=token,
         )
+        # Unwrap Gemma4ClippableLinear -> nn.Linear for PEFT compatibility
+        try:
+            from transformers.models.gemma4.modeling_gemma4 import Gemma4ClippableLinear
+            for name, module in list(m.named_modules()):
+                if isinstance(module, Gemma4ClippableLinear):
+                    parts = name.split(".")
+                    parent = m
+                    for p in parts[:-1]:
+                        parent = getattr(parent, p)
+                    setattr(parent, parts[-1], module.linear)
+            logger.info("Unwrapped Gemma4ClippableLinear modules for PEFT compatibility")
+        except ImportError:
+            pass
         if dapt_adapter:
             logger.info("Merging DAPT adapter: %s", dapt_adapter)
-            m = PeftModel.from_pretrained(m, dapt_adapter, token=token)
-            m = m.merge_and_unload()
+            try:
+                m = PeftModel.from_pretrained(m, dapt_adapter, token=token)
+                m = m.merge_and_unload()
+            except (ValueError, OSError) as exc:
+                logger.warning("DAPT adapter not found, skipping: %s", exc)
         if base_adapter:
             logger.info("Merging GRPO adapter: %s", base_adapter)
             m = PeftModel.from_pretrained(m, base_adapter, token=token)
@@ -139,7 +155,7 @@ def main():
     logger.info("Loading base model: %s (BF16, attn=%s)", base_model_id, attn_impl)
     model = _load_and_merge_base()
     model.config.use_cache = False
-    model = prepare_model_for_kbit_training(model)
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
 
     lora_cfg = LoraConfig(
         r=lora_r,
