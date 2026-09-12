@@ -98,6 +98,19 @@ def _merge_adapter(base_model: str, adapter_repo: str, token: str, out_dir: Path
     )
     tokenizer = AutoTokenizer.from_pretrained(base_model, token=token)
 
+    try:
+        from transformers.models.gemma4.modeling_gemma4 import Gemma4ClippableLinear
+        for name, module in list(model.named_modules()):
+            if isinstance(module, Gemma4ClippableLinear):
+                parts = name.split(".")
+                parent = model
+                for p in parts[:-1]:
+                    parent = getattr(parent, p)
+                setattr(parent, parts[-1], module.linear)
+        logger.info("Unwrapped Gemma4ClippableLinear modules for PEFT compatibility")
+    except ImportError:
+        pass
+
     all_adapters = list(adapter_chain or []) + [adapter_repo]
     for adapter_id in all_adapters:
         logger.info("Merging adapter: %s", adapter_id)
