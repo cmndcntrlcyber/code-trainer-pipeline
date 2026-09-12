@@ -291,7 +291,7 @@ rl_training:
     preference_dataset: ${HF_USERNAME}/code-trainer-v10-dpo-pairs
     beta: 0.1
     learning_rate: 5e-7            # halved from Qwen's 1e-6
-    max_length: 4096               # full context for agent traces
+    max_length: 2048               # reduced from 4096 — DPO dual forward pass OOMs at 4096 on 52GB model
     max_pairs: 800                 # reduced from 1000 — budget + VRAM constraint
     ref_model_strategy: "peft_implicit"  # ref_model=None — PEFT handles it
     output_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-dpo
