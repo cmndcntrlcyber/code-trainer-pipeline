@@ -1,10 +1,21 @@
 """
 phase4c_rl/data/collect_negatives.py
 
-Generate negative examples by running the V9 adapter through prompts and
-collecting responses that fail the tool-call reward function.
+Generate negative examples for DPO training.
 
-Usage:
+Two modes:
+  --synthetic: Rule-based degradation of positive OCO sessions (no GPU needed).
+               Generates refusals, stripped tool calls, truncated, and hallucinated responses.
+
+  (default):   Model-based — runs the adapter through prompts and collects
+               responses that fail the reward function (requires GPU).
+
+Usage (synthetic — no GPU):
+    python -m src.phase4c_rl.data.collect_negatives --synthetic \
+        --input data/oco_converted/train.jsonl \
+        --output-dir data/rl_data/negatives
+
+Usage (model-based — requires GPU):
     set -a && source .env && set +a
     python -m src.phase4c_rl.data.collect_negatives \
         --config src/config/config.yaml \
@@ -31,11 +42,108 @@ logger = logging.getLogger(__name__)
 # Reward threshold: responses scoring below this are saved as negatives.
 NEGATIVE_THRESHOLD = 0.5
 
+REFUSALS = [
+    "I'm sorry, but I can't assist with that request as it may involve unauthorized access to systems.",
+    "I appreciate your question, but I'm not able to help with activities that could compromise system security.",
+    "That's an interesting question! However, I need to decline as this could involve unauthorized testing.",
+    "I understand you're interested in security testing, but I can't provide guidance on that without proper authorization.",
+    "I'd recommend consulting your organization's security team for guidance on this type of activity.",
+]
+
+WRONG_COMMANDS = [
+    "ls -la /tmp", "cat /etc/passwd", "echo 'test'", "whoami", "pwd",
+    "ping -c 1 localhost", "curl http://example.com", "netstat -an", "ps aux", "uname -a",
+]
+
+
+def _extract_prompt(messages):
+    for msg in messages:
+        if msg.get("role") == "user" and msg.get("content", "").strip():
+            return msg["content"].strip()
+    return None
+
+
+def _extract_assistant_response(messages):
+    parts = []
+    for msg in messages:
+        if msg.get("role") == "assistant" and msg.get("content", "").strip():
+            parts.append(msg["content"])
+    return "\n".join(parts) if parts else None
+
+
+def _generate_synthetic(input_path, output_dir, seed=42):
+    """Generate negatives by degrading positive OCO sessions."""
+    import random
+    random.seed(seed)
+
+    sessions = []
+    with open(input_path) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                sessions.append(json.loads(line))
+
+    logger.info("Loaded %d sessions from %s", len(sessions), input_path)
+
+    negatives = []
+    stats = {"refusal": 0, "stripped": 0, "truncated": 0, "hallucinated": 0, "skipped": 0}
+
+    for session in sessions:
+        messages = session.get("messages", [])
+        prompt = _extract_prompt(messages)
+        response = _extract_assistant_response(messages)
+        if not prompt or not response:
+            stats["skipped"] += 1
+            continue
+
+        negatives.append({"prompt": prompt, "response": random.choice(REFUSALS)})
+        stats["refusal"] += 1
+
+        import re
+        stripped = re.sub(r"<tool_call>.*?</tool_call>", "", response, flags=re.DOTALL)
+        stripped = re.sub(r"\n{3,}", "\n\n", stripped).strip() or "I'll look into that for you."
+        negatives.append({"prompt": prompt, "response": stripped})
+        stats["stripped"] += 1
+
+        cut = max(20, int(len(response) * 0.3))
+        truncated = response[:cut].rsplit(" ", 1)[0] + "..."
+        negatives.append({"prompt": prompt, "response": truncated})
+        stats["truncated"] += 1
+
+        tool_calls = re.findall(r"<tool_call>(.*?)</tool_call>", response, re.DOTALL)
+        if tool_calls:
+            modified = response
+            for tc in tool_calls:
+                try:
+                    tc_data = json.loads(tc)
+                    if "arguments" in tc_data and "command" in tc_data["arguments"]:
+                        tc_data["arguments"]["command"] = random.choice(WRONG_COMMANDS)
+                        new_tc = f"<tool_call>{json.dumps(tc_data)}</tool_call>"
+                        modified = modified.replace(f"<tool_call>{tc}</tool_call>", new_tc, 1)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+            if modified != response:
+                negatives.append({"prompt": prompt, "response": modified})
+                stats["hallucinated"] += 1
+
+    out_file = output_dir / "negatives.json"
+    out_file.write_text(json.dumps(negatives, indent=2, ensure_ascii=False))
+    (output_dir / "collection_stats.json").write_text(json.dumps(stats, indent=2))
+
+    logger.info("Generated %d synthetic negatives -> %s", len(negatives), out_file)
+    logger.info("Stats: %s", json.dumps(stats))
+    return negatives
+
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Collect negative examples from V9 adapter for DPO"
+        description="Collect negative examples for DPO training"
     )
+    parser.add_argument("--synthetic", action="store_true",
+                        help="Generate negatives by degrading positives (no GPU needed)")
+    parser.add_argument("--input", default=None,
+                        help="Path to train.jsonl (required for --synthetic)")
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--config", default="src/config/config.yaml")
     parser.add_argument("--adapter", default=None,
                         help="Override adapter repo (default: config rl_training.grpo.base_adapter)")
@@ -47,6 +155,14 @@ def main():
     parser.add_argument("--max-prompts", type=int, default=200,
                         help="Maximum number of prompts to process")
     args = parser.parse_args()
+
+    if args.synthetic:
+        if not args.input:
+            raise SystemExit("--input required with --synthetic")
+        output_dir = Path(args.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        _generate_synthetic(Path(args.input), output_dir, seed=args.seed)
+        return
 
     config = load_config(args.config)
     rl_cfg = config.get("rl_training", {})
