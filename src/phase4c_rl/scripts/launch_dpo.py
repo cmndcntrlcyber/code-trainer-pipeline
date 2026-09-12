@@ -93,6 +93,7 @@ def main():
         "num_epochs": 1,
         "batch_size": 2,
         "gradient_accumulation": 4,
+        "ref_model_strategy": dpo_cfg.get("ref_model_strategy", "explicit"),
     }
 
     env = {
