@@ -117,19 +117,8 @@ def main():
     logger.info("Attention implementation: %s", attn_impl)
     model.config.use_cache = False
 
-    # Unwrap Gemma4ClippableLinear -> nn.Linear for PEFT compatibility
-    try:
-        from transformers.models.gemma4.modeling_gemma4 import Gemma4ClippableLinear
-        for name, module in list(model.named_modules()):
-            if isinstance(module, Gemma4ClippableLinear):
-                parts = name.split(".")
-                parent = model
-                for p in parts[:-1]:
-                    parent = getattr(parent, p)
-                setattr(parent, parts[-1], module.linear)
-        logger.info("Unwrapped Gemma4ClippableLinear modules for PEFT compatibility")
-    except ImportError:
-        pass
+    from src.utils import unwrap_clippable_linear
+    unwrap_clippable_linear(model)
 
     # LoRA config -- target all attention + MLP projections
     from peft import LoraConfig, TaskType, get_peft_model

@@ -126,19 +126,8 @@ def main():
             attn_implementation=attn_impl,
             token=token,
         )
-        # Unwrap Gemma4ClippableLinear -> nn.Linear for PEFT compatibility
-        try:
-            from transformers.models.gemma4.modeling_gemma4 import Gemma4ClippableLinear
-            for name, module in list(m.named_modules()):
-                if isinstance(module, Gemma4ClippableLinear):
-                    parts = name.split(".")
-                    parent = m
-                    for p in parts[:-1]:
-                        parent = getattr(parent, p)
-                    setattr(parent, parts[-1], module.linear)
-            logger.info("Unwrapped Gemma4ClippableLinear modules for PEFT compatibility")
-        except ImportError:
-            pass
+        from src.utils import unwrap_clippable_linear
+        unwrap_clippable_linear(m)
         if dapt_adapter:
             logger.info("Merging DAPT adapter: %s", dapt_adapter)
             try:

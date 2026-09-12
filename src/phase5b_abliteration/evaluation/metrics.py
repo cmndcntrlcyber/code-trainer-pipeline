@@ -192,14 +192,25 @@ def measure_perplexity(
     }
 
 
+def _load_first_split(dataset_id: str) -> "Dataset":
+    """Load the first available split from a dataset."""
+    from datasets import get_dataset_split_names
+    try:
+        splits = get_dataset_split_names(dataset_id)
+        split = "train" if "train" in splits else splits[0]
+    except Exception:
+        split = "train"
+    return load_dataset(dataset_id, split=split)
+
+
 def load_harmful_prompts(dataset_id: str, n: int = 200) -> list[str]:
-    ds = load_dataset(dataset_id, split="train")
+    ds = _load_first_split(dataset_id)
     col = "prompt" if "prompt" in ds.column_names else ds.column_names[0]
     return [row[col] for row in ds if row[col] and row[col].strip()][:n]
 
 
 def load_harmless_prompts(dataset_id: str = "tatsu-lab/alpaca", n: int = 200) -> list[str]:
-    ds = load_dataset(dataset_id, split="train")
+    ds = _load_first_split(dataset_id)
     prompts = [
         row["instruction"]
         for row in ds
