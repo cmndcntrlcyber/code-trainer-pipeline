@@ -360,12 +360,12 @@ rl_training:
 # Peak disk: ~156 GB (52 GB cache + 52 GB merged + 52 GB F16 GGUF).
 # A100-large has ~200+ GB workspace — fits with cleanup between steps.
 
-deployment:
+gemma_deployment:
   quantization: "Q4_K_M"
   context_length: 4096
   port: 8080
   gguf_repo: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-gguf
-  source_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v11-farca
+  source_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-dpo
   adapter_chain:
     - ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
     - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-aggressive-full1
@@ -389,7 +389,7 @@ deployment:
 
 abliteration:
   base_model: "google/gemma-4-26B-A4B-it"
-  source_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v11-farca
+  source_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-dpo
   adapter_chain:
     - ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
     - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-aggressive-full1
