@@ -91,8 +91,8 @@ def main():
         "beta": float(dpo_cfg.get("beta", 0.1)),
         "max_length": int(dpo_cfg.get("max_length", 4096)),
         "num_epochs": 1,
-        "batch_size": 2,
-        "gradient_accumulation": 4,
+        "batch_size": 1,
+        "gradient_accumulation": 8,
         "ref_model_strategy": dpo_cfg.get("ref_model_strategy", "explicit"),
     }
 
