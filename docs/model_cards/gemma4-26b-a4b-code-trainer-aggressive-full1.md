@@ -50,7 +50,7 @@ Qwen pipeline for MoE routing stability.
   JavaScript, TypeScript, Java, Go, Rust, C++, C#).
 * **Downstream:** merge into the base model for RL stages (FARCA-GRPO, DPO)
   and eventual GGUF quantization — see
-  [`gemma4-26b-a4b-code-trainer-gguf`](https://huggingface.co/cmndcntrlcyber/gemma4-26b-a4b-code-trainer-gguf).
+  [`gemma26b-offsec-coder-gguf`](https://huggingface.co/cmndcntrlcyber/gemma26b-offsec-coder-gguf).
 * **Out of scope:** this adapter was not trained for safety alignment, RLHF,
   or non-code tasks.
 

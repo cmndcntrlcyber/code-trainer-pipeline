@@ -12,7 +12,7 @@ tags:
 pipeline_tag: text-generation
 ---
 
-# gemma4-26b-a4b-code-trainer-gguf
+# gemma26b-offsec-coder-gguf
 
 GGUF quantizations of the Code-Trainer fine-tuned Gemma 4 26B model. The full
 adapter chain —

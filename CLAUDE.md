@@ -129,10 +129,16 @@ python -m src.phase4c_rl.data.build_dpo_pairs \
     --push-to-hub --config src/config/pipeline-gemma26b.yml
 ```
 
+**Build V10 vision dataset (4K multimodal + 4K text):**
+```bash
+python -m src.phase2_preprocessing.scripts.build_v10_vision_dataset --config src/config/pipeline-gemma26b.yml --hub-repo cmndcntrlcyber/code-trainer-v10-vision
+```
+
 **Run the full Gemma 26B pipeline (see `docs/PIPELINE.md` for details):**
 ```bash
 python -m src.phase3b_dapt.scripts.launch_dapt --config src/config/pipeline-gemma26b.yml --wait
 python -m src.phase4_gemma_finetuning.scripts.launch_full_training --config src/config/pipeline-gemma26b.yml --wait
+python -m src.phase4_gemma_finetuning.scripts.launch_vision_training --config src/config/pipeline-gemma26b.yml --wait
 python -m src.phase4c_rl.scripts.launch_farca_grpo --config src/config/pipeline-gemma26b.yml --wait
 python -m src.phase4c_rl.scripts.launch_dpo --config src/config/pipeline-gemma26b.yml --wait
 python -m src.phase5_gemma_deployment.scripts.launch_convert --config src/config/pipeline-gemma26b.yml --wait
@@ -164,7 +170,7 @@ black .
 - Phase 3: Infrastructure complete — Swin-B vision model awaiting Hub dataset
 - Phase 3b: Infrastructure complete — DAPT on offsec corpus (`src/phase3b_dapt/`)
 - Phase 4 (Qwen): V7–V9 SFT complete — V10 pending Phase 4c RL data
-- Phase 4 (Gemma): Infrastructure complete — Gemma-4-26B-A4B-it pipeline with Nexus persona (`src/phase4_gemma_finetuning/`)
+- Phase 4 (Gemma): Infrastructure complete — Gemma-4-26B-A4B-it pipeline with Nexus persona + native vision SFT (`src/phase4_gemma_finetuning/`)
 - Phase 4c: Infrastructure complete — GRPO + DPO + FARCA-GRPO scripts, 6-component reward function (incl. persona), session ingestion (`src/phase4c_rl/`)
 - Phase 5 (Qwen): V8 GGUF complete — Q5_K_M default (`src/phase5_deployment/`)
 - Phase 5 (Gemma): Infrastructure complete (`src/phase5_gemma_deployment/`)

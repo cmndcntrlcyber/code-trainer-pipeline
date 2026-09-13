@@ -65,21 +65,31 @@ def _ensure_llama_cpp():
 
 
 def _merge_adapter(base_model: str, adapter_repo: str, token: str, out_dir: Path,
-                    adapter_chain: list[str] | None = None):
+                    adapter_chain: list[str] | None = None,
+                    enable_vision: bool = False):
     """Download base + adapter chain, merge in float16 on CPU, save to out_dir.
 
     adapter_chain: optional list of adapters to merge before the final adapter_repo.
     E.g. [dapt_adapter, sft_adapter] then adapter_repo is the GRPO adapter.
+    enable_vision: use Gemma4ForConditionalGeneration to preserve the vision tower.
     """
     import torch
     from peft import PeftModel
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    logger.info("Loading base %s in float16 on CPU", base_model)
-    base = AutoModelForCausalLM.from_pretrained(
-        base_model, torch_dtype=torch.float16, device_map="cpu",
-        low_cpu_mem_usage=True, token=token,
-    )
+    if enable_vision:
+        from transformers import Gemma4ForConditionalGeneration
+        logger.info("Loading base %s in float16 on CPU (vision-aware)", base_model)
+        base = Gemma4ForConditionalGeneration.from_pretrained(
+            base_model, torch_dtype=torch.float16, device_map="cpu",
+            low_cpu_mem_usage=True, token=token,
+        )
+    else:
+        logger.info("Loading base %s in float16 on CPU", base_model)
+        base = AutoModelForCausalLM.from_pretrained(
+            base_model, torch_dtype=torch.float16, device_map="cpu",
+            low_cpu_mem_usage=True, token=token,
+        )
     tokenizer = AutoTokenizer.from_pretrained(base_model, token=token)
 
     from src.utils import unwrap_clippable_linear
@@ -191,10 +201,12 @@ def main():
     _ensure_llama_cpp()
 
     adapter_chain = params.get("adapter_chain")
+    enable_vision = params.get("enable_vision", False)
 
     merged_dir = WORK / "merged"
     _merge_adapter(base_model, adapter_repo, token, merged_dir,
-                    adapter_chain=adapter_chain)
+                    adapter_chain=adapter_chain,
+                    enable_vision=enable_vision)
 
     f16_path = WORK / f"{name_stem}-merged-F16.gguf"
     _convert_to_gguf_f16(merged_dir, f16_path)

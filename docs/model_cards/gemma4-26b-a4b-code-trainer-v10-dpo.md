@@ -58,7 +58,7 @@ google/gemma-4-26B-A4B-it
 ```
 
 For deployment, all four are merged into the base and quantized to GGUF
-(see [`gemma4-26b-a4b-code-trainer-gguf`](https://huggingface.co/cmndcntrlcyber/gemma4-26b-a4b-code-trainer-gguf)).
+(see [`gemma26b-offsec-coder-gguf`](https://huggingface.co/cmndcntrlcyber/gemma26b-offsec-coder-gguf)).
 
 ## Training data
 

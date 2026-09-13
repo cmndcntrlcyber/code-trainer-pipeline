@@ -19,7 +19,7 @@ The model ships with the **Nexus** persona — an advanced cyber threat emulatio
 | 3 | Vision Model | Infrastructure complete | Swin-B + MLP projector + Qwen2.5-Coder-1.5B LoRA |
 | 3b | DAPT | Infrastructure complete | Domain-adaptive continued pretraining on offsec corpus |
 | 4 | SFT | V7–V9 complete | Qwen-14B LoRA instruction tuning (V9 mixed dataset: offsec + tool-calling + agent traces + instruction) |
-| 4 (Gemma) | Gemma SFT | Infrastructure complete | Gemma-4-26B-A4B-it parallel track with Nexus persona injection |
+| 4 (Gemma) | Gemma SFT | Infrastructure complete | Gemma-4-26B-A4B-it with Nexus persona + native vision SFT (SigLIP 550M) |
 | 4c | Chain-of-Thought RL | Infrastructure complete | GRPO (6-component reward incl. persona) + DPO (OCO + persona pairs) |
 | 5 | GGUF Deployment | V8 complete | LoRA merge → Q5_K_M quantization → llama.cpp/Ollama |
 | 5 (Gemma) | Gemma GGUF | Infrastructure complete | Gemma-4-12B-it GGUF conversion |
@@ -138,12 +138,13 @@ python -m src.phase4c_rl.data.build_dpo_pairs --negatives-dir data/rl_negatives 
 # Training (HF Jobs A100, ~$50 total)
 python -m src.phase3b_dapt.scripts.launch_dapt --config src/config/pipeline-gemma26b.yml --wait
 python -m src.phase4_gemma_finetuning.scripts.launch_full_training --config src/config/pipeline-gemma26b.yml --wait
+python -m src.phase4_gemma_finetuning.scripts.launch_vision_training --config src/config/pipeline-gemma26b.yml --wait
 python -m src.phase4c_rl.scripts.launch_farca_grpo --config src/config/pipeline-gemma26b.yml --wait
 python -m src.phase4c_rl.scripts.launch_dpo --config src/config/pipeline-gemma26b.yml --wait
 python -m src.phase5_gemma_deployment.scripts.launch_convert --config src/config/pipeline-gemma26b.yml --wait
 
 # Verify
-ollama run hf.co/cmndcntrlcyber/gemma4-26b-a4b-code-trainer-gguf:IQ4_XS "What is your objective?"
+ollama run hf.co/cmndcntrlcyber/gemma26b-offsec-coder-gguf:IQ4_XS "What is your objective?"
 
 # ═══ Qwen 14B Pipeline (legacy) ═══
 

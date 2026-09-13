@@ -1,21 +1,26 @@
 """
 phase4_gemma_finetuning/hf_skills/train_entry.py
 
-Entry script executed *inside* an HF Jobs A100 container for the Phase 4A
-Gemma validation sweep.
+Entry script executed *inside* an HF Jobs A100 container for the Phase 4
+Gemma SFT (text-only or multimodal).
+
+Supports two modes:
+    - Text-only (default): AutoModelForCausalLM + AutoTokenizer
+    - Vision (enable_vision=True): Gemma4ForConditionalGeneration + AutoProcessor
+      Uses Gemma's native SigLIP vision encoder (550M params, frozen).
+      Trains the projector (1152→2816 linear) + LoRA on the language model.
 
 Key differences from the Qwen variant:
-    - Base model: google/gemma-4-12B-it (12B dense, native multimodal)
-    - Chat template: Gemma 4 has no system role — system prompt is merged
-      into the first user message
+    - Base model: google/gemma-4-26B-A4B-it (26B MoE, native multimodal)
+    - Chat template: Gemma 4 26B supports native system role; 12B does not
     - Tokenizer: Gemma 4 already has pad_token="<pad>" (no eos fallback)
-    - Default max_seq_length: 4096 (up from 2048)
+    - Default max_seq_length: 4096
 
 Expected env vars inside the job:
     HF_TOKEN             — write access to the per-config adapter repo
     WANDB_API_KEY        — optional; if absent, runs offline
     PHASE4_PARAMS_JSON   — full hyperparam blob (see SweepConfig + cloud.*)
-    PHASE4_ADAPTER_REPO  — e.g. cmndcntrlcyber/gemma4-12b-code-trainer-standard
+    PHASE4_ADAPTER_REPO  — e.g. cmndcntrlcyber/gemma4-26b-a4b-code-trainer-standard
 """
 import json
 import logging
@@ -99,18 +104,30 @@ def main():
     output_dir = Path(params.get("output_dir", "/tmp/phase4-gemma12b"))
     wandb_project = os.environ.get("WANDB_PROJECT", "rtpi-phase4-gemma4-12b")
 
+    enable_vision = params.get("enable_vision", False)
+    train_projector = params.get("train_projector", True)
+    freeze_vision_tower = params.get("freeze_vision_tower", True)
+
+    mode_label = "VISION" if enable_vision else "TEXT"
     logger.info("=" * 60)
-    logger.info(f"PHASE 4A GEMMA — {cfg.name} ({model_id})")
+    logger.info(f"PHASE 4 GEMMA [{mode_label}] — {cfg.name} ({model_id})")
     logger.info(f"  LoRA r={cfg.lora_r} alpha={cfg.lora_alpha} lr={cfg.learning_rate}")
     logger.info(f"  bs={cfg.batch_size} accum={cfg.gradient_accumulation} eff={cfg.effective_batch}")
     logger.info(f"  dataset:    {dataset_id}@{dataset_revision}")
     logger.info(f"  adapter:    {adapter_repo}")
     logger.info(f"  output_dir: {output_dir}")
+    if enable_vision:
+        logger.info(f"  vision:     ENABLED (tower={'frozen' if freeze_vision_tower else 'trainable'}, projector={'trainable' if train_projector else 'frozen'})")
     logger.info("=" * 60)
 
-    # ─── 1. Tokenizer + chat formatting ────────────────────────────────────
-    tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
-    # Gemma 4 has pad_token="<pad>" (id=0) — no eos fallback needed
+    # ─── 1. Tokenizer/Processor + chat formatting ───────────────────────────
+    if enable_vision:
+        from transformers import AutoProcessor
+        processor = AutoProcessor.from_pretrained(model_id)
+        tokenizer = processor.tokenizer
+    else:
+        processor = None
+        tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
 
     logger.info(f"Loading dataset {dataset_id}@{dataset_revision}")
     ds = load_dataset(dataset_id, revision=dataset_revision)
@@ -126,22 +143,44 @@ def main():
         ds["validation"] = ds["validation"].select(range(n))
         logger.info(f"  validation sliced to first {n} rows (PHASE4_VAL_LIMIT)")
 
-    ds = ds.map(lambda ex: _format_chat(ex, tokenizer, model_id=model_id),
-                remove_columns=[c for c in ds["train"].column_names if c != "messages"])
+    if not enable_vision:
+        ds = ds.map(lambda ex: _format_chat(ex, tokenizer, model_id=model_id),
+                    remove_columns=[c for c in ds["train"].column_names if c != "messages"])
     logger.info(f"  splits: {list(ds.keys())}  train={len(ds['train'])} val={len(ds['validation'])}")
 
     # ─── 2. Base model + LoRA ──────────────────────────────────────────────
-    logger.info(f"Loading {model_id} (BF16)")
-    model = AutoModelForCausalLM.from_pretrained(
-        model_id,
-        dtype=torch.bfloat16,
-        device_map="auto",
-    )
+    logger.info(f"Loading {model_id} (BF16, vision={enable_vision})")
+    if enable_vision:
+        from transformers import Gemma4ForConditionalGeneration
+        model = Gemma4ForConditionalGeneration.from_pretrained(
+            model_id,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+        )
+    else:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            dtype=torch.bfloat16,
+            device_map="auto",
+        )
     model.config.use_cache = False
     model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
 
     from src.utils import unwrap_clippable_linear
     unwrap_clippable_linear(model)
+
+    # Freeze vision tower, optionally train projector
+    if enable_vision:
+        if freeze_vision_tower:
+            for name, param in model.named_parameters():
+                if "vision_tower" in name or "vision_model" in name:
+                    param.requires_grad = False
+            logger.info("  Vision tower: frozen")
+        if train_projector:
+            for name, param in model.named_parameters():
+                if "multi_modal_projector" in name or "embedding_projection" in name:
+                    param.requires_grad = True
+            logger.info("  Projector: trainable")
 
     lora_cfg = LoraConfig(
         r=cfg.lora_r,
@@ -164,13 +203,26 @@ def main():
     )
 
     from trl import SFTTrainer
-    trainer = SFTTrainer(
-        model=model,
-        args=training_args,
-        train_dataset=ds["train"],
-        eval_dataset=ds["validation"],
-        processing_class=tokenizer,
-    )
+
+    if enable_vision:
+        from src.phase4_gemma_finetuning.training.vision_collator import VisionSFTCollator
+        collator = VisionSFTCollator(processor=processor, max_seq_length=max_seq_length)
+        trainer = SFTTrainer(
+            model=model,
+            args=training_args,
+            train_dataset=ds["train"],
+            eval_dataset=ds["validation"],
+            data_collator=collator,
+            processing_class=processor,
+        )
+    else:
+        trainer = SFTTrainer(
+            model=model,
+            args=training_args,
+            train_dataset=ds["train"],
+            eval_dataset=ds["validation"],
+            processing_class=tokenizer,
+        )
     trainer.train()
 
     # ─── 4. Save best adapter + push ───────────────────────────────────────
@@ -178,6 +230,8 @@ def main():
     best_dir.mkdir(parents=True, exist_ok=True)
     trainer.model.save_pretrained(str(best_dir))
     tokenizer.save_pretrained(str(best_dir))
+    if enable_vision and processor:
+        processor.save_pretrained(str(best_dir))
 
     eval_metrics = trainer.evaluate()
     (best_dir / "phase4-result.json").write_text(json.dumps({
@@ -185,6 +239,7 @@ def main():
         "model_id": model_id,
         "dataset": f"{dataset_id}@{dataset_revision}",
         "num_epochs": num_epochs,
+        "enable_vision": enable_vision,
         "eval_loss": eval_metrics.get("eval_loss"),
         "eval_runtime": eval_metrics.get("eval_runtime"),
     }, indent=2, default=str))

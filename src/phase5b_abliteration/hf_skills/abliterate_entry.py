@@ -86,16 +86,25 @@ def _ensure_llama_cpp():
 
 
 def _merge_adapter(base_model: str, adapter_repo: str, token: str, out_dir: Path,
-                    adapter_chain: list[str] | None = None):
+                    adapter_chain: list[str] | None = None,
+                    enable_vision: bool = False):
     import torch
     from peft import PeftModel
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    logger.info("Loading base %s in float16 on CPU", base_model)
-    model = AutoModelForCausalLM.from_pretrained(
-        base_model, torch_dtype=torch.float16, device_map="cpu",
-        low_cpu_mem_usage=True, token=token,
-    )
+    if enable_vision:
+        from transformers import Gemma4ForConditionalGeneration
+        logger.info("Loading base %s in float16 on CPU (vision-aware)", base_model)
+        model = Gemma4ForConditionalGeneration.from_pretrained(
+            base_model, torch_dtype=torch.float16, device_map="cpu",
+            low_cpu_mem_usage=True, token=token,
+        )
+    else:
+        logger.info("Loading base %s in float16 on CPU", base_model)
+        model = AutoModelForCausalLM.from_pretrained(
+            base_model, torch_dtype=torch.float16, device_map="cpu",
+            low_cpu_mem_usage=True, token=token,
+        )
     tokenizer = AutoTokenizer.from_pretrained(base_model, token=token)
 
     from src.utils import unwrap_clippable_linear
@@ -116,16 +125,25 @@ def _merge_adapter(base_model: str, adapter_repo: str, token: str, out_dir: Path
     gc.collect()
 
 
-def _download_base_model(base_model: str, token: str, out_dir: Path):
+def _download_base_model(base_model: str, token: str, out_dir: Path,
+                          enable_vision: bool = False):
     """Download a base model directly (no adapter merge) for baseline abliteration."""
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    logger.info("Downloading base model %s in float16 on CPU (no adapter)", base_model)
-    model = AutoModelForCausalLM.from_pretrained(
-        base_model, dtype=torch.float16, device_map="cpu",
-        low_cpu_mem_usage=True, token=token,
-    )
+    if enable_vision:
+        from transformers import Gemma4ForConditionalGeneration
+        logger.info("Downloading base model %s in float16 on CPU (vision-aware, no adapter)", base_model)
+        model = Gemma4ForConditionalGeneration.from_pretrained(
+            base_model, torch_dtype=torch.float16, device_map="cpu",
+            low_cpu_mem_usage=True, token=token,
+        )
+    else:
+        logger.info("Downloading base model %s in float16 on CPU (no adapter)", base_model)
+        model = AutoModelForCausalLM.from_pretrained(
+            base_model, dtype=torch.float16, device_map="cpu",
+            low_cpu_mem_usage=True, token=token,
+        )
     tokenizer = AutoTokenizer.from_pretrained(base_model, token=token)
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -202,13 +220,17 @@ def main():
 
     # 1. Merge LoRA → HF weights (or download base directly for baseline runs)
     merged_dir = WORK / "merged"
+    enable_vision = params.get("enable_vision", False)
+
     if not merged_dir.exists():
         if adapter_repo and str(adapter_repo).lower() != "null":
             adapter_chain = params.get("adapter_chain", [])
             _merge_adapter(base_model, adapter_repo, token, merged_dir,
-                            adapter_chain=adapter_chain)
+                            adapter_chain=adapter_chain,
+                            enable_vision=enable_vision)
         else:
-            _download_base_model(base_model, token, merged_dir)
+            _download_base_model(base_model, token, merged_dir,
+                                  enable_vision=enable_vision)
     else:
         logger.info("Merged model already exists at %s", merged_dir)
 
@@ -268,8 +290,10 @@ def main():
 
     api = HfApi(token=token)
 
+    abliterated_gguf_repo_override = params.get("abliterated_gguf_repo")
+
     for tech_name, abl_dir in abliterated_dirs.items():
-        gguf_repo = f"{output_base}-{tech_name}-abliterated-gguf"
+        gguf_repo = abliterated_gguf_repo_override or f"{output_base}-{tech_name}-abliterated-gguf"
 
         for quant in quants:
             gguf_path = WORK / f"{tech_name}_{quant}.gguf"

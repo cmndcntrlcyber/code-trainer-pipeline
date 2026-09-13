@@ -42,17 +42,18 @@
 #
 # RUN ORDER (sequential, with gates):
 #
-#   Job 1: Phase 3b DAPT         →  $6.40  (2.0h est / 3.0h timeout)
-#   Job 2: Phase 4  SFT          → $16.00  (5.0h est / 7.5h timeout)
-#   Job 3: Phase 4  Validation   →  $1.60  (30min est / 45min timeout)
-#          ── GATE: tool_call_pass_rate >= 0.75, gsm8k >= 0.50 ──
-#   Job 4:  Phase 4c GRPO         →  $9.60  (3.0h est / 4.5h timeout)
-#   Job 4b: Phase 4c FARCA-GRPO  →  $9.60  (3.0h est / 4.5h timeout)  [ALTERNATIVE to Job 4]
-#   Job 5:  Phase 4c DPO          →  $4.80  (1.5h est / 2.25h timeout)
-#   Job 6: Phase 4c Validation   →  $1.60  (30min est / 45min timeout)
-#          ── GATE: tool_call_pass_rate >= 0.80, agent_progress >= 4/7 ──
-#   Job 7: Phase 5  GGUF         →  $2.40  (45min est / 67min timeout)
-#   Job 8: Phase 5b Abliteration →  $8.00  (2.5h est / 3.75h timeout)
+#   Job 1:  Phase 3b DAPT          →  $6.40  (2.0h est / 3.0h timeout)
+#   Job 2:  Phase 4  SFT (text)    → $16.00  (5.0h est / 7.5h timeout)
+#   Job 2b: Phase 4  Vision SFT    →  $6.40  (2.0h est / 3.0h timeout) [NEW — native SigLIP]
+#   Job 3:  Phase 4  Validation    →  $1.60  (30min est / 45min timeout)
+#           ── GATE: tool_call_pass_rate >= 0.75, gsm8k >= 0.50 ──
+#   Job 4:  Phase 4c GRPO          →  $9.60  (3.0h est / 4.5h timeout)
+#   Job 4b: Phase 4c FARCA-GRPO   →  $9.60  (3.0h est / 4.5h timeout) [ALTERNATIVE to Job 4]
+#   Job 5:  Phase 4c DPO           →  $4.80  (1.5h est / 2.25h timeout)
+#   Job 6:  Phase 4c Validation    →  $1.60  (30min est / 45min timeout)
+#           ── GATE: tool_call_pass_rate >= 0.80, agent_progress >= 6/10 ──
+#   Job 7:  Phase 5  GGUF          →  $2.40  (45min est / 67min timeout)
+#   Job 8:  Phase 5b Abliteration  →  $8.00  (2.5h est / 3.75h timeout)
 #
 # COST COMPARISON vs Qwen pipeline-50:
 #   Allocated: $50.40 vs $33.92 (1.49x) — driven by 52 GB model download,
@@ -232,31 +233,53 @@ gemma_finetuning:
       timeout_seconds: 2700        # 45min — 150% of 30min estimate
       wait_timeout_seconds: 5400
 
-# ─── Vision Model (reference — not in this pipeline run) ─────────
+# ─── Job 2b: Phase 4 Vision SFT — $6.40 (2.0h est / 3.0h timeout) ─
+#
+# Multimodal SFT using Gemma's built-in vision encoder (550M SigLIP ViT).
+# Vision tower frozen, projector (1152→2816 linear) + LoRA trained.
+# 8K rows (4K vision + 4K text regularization) at seq_len=4096, 1 epoch.
+#
+# Uses Gemma4ForConditionalGeneration (not AutoModelForCausalLM) to preserve
+# the native vision tower. The SigLIP encoder produces 280 soft tokens per
+# image, adding ~7% to effective sequence length.
+#
+# VRAM BUDGET (A100 80 GB):
+#   Model BF16 (with vision tower): ~53 GB
+#   LoRA (r=32): ~80 MB
+#   Projector trainable: ~13 MB (1152*2816 linear)
+#   Activations with images: ~6-8 GB (280 visual + ~3800 text tokens)
+#   Total: ~60-62 GB — ~18-20 GB headroom
+#
+# Run order: after SFT (Job 2), before validation (Job 3).
+# Cost: drawn from contingency budget.
 
-vision_model:
-  device_profile: "a100"
-  vision_encoder: "microsoft/swin-base-patch4-window7-224"
-  decoder: "Qwen/Qwen2.5-Coder-1.5B-Instruct"
-  dataset_id: "cmndcntrlcyber/code-trainer-offsec-dataset"
-  dataset_revision: "v2-multimodal"
-  batch_size: 8
-  gradient_accumulation: 4
-  learning_rate: 2e-4
-  num_epochs: 3
-  max_seq_length: 2048
-  compute_dtype: "bfloat16"
-  gradient_checkpointing: true
-  use_8bit_optimizer: false
-  lora_r: 16
-  lora_alpha: 32
+gemma_vision_sft:
+  model: "google/gemma-4-26B-A4B-it"
+  base_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-aggressive-full1
+  dapt_adapter: ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
+  hardware: "a100-large"
+  dataset_id: "cmndcntrlcyber/code-trainer-v10-vision"
+  dataset_revision: "main"
+  enable_vision: true
+  train_projector: true
+  freeze_vision_tower: true
+  num_epochs: 1
+  max_seq_length: 4096
+  train_limit: 8000
+
+  lora_r: 32
+  lora_alpha: 64
   lora_dropout: 0.05
-  output_dir: ./models/vision_model
+  learning_rate: 2.5e-5            # halved from text SFT's 5e-5 — vision training is sensitive
+  batch_size: 1
+  gradient_accumulation: 16
+
+  output_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-vision-sft
+
   cloud:
     hardware: "a100-large"
-    wandb_project: "rtpi-phase3-vision"
-    adapter_repo: ${HF_USERNAME}/code-trainer-vision-adapter
-    timeout_seconds: 36000
+    wandb_project: "rtpi-phase4-gemma26b-vision"
+    timeout_seconds: 10800         # 3h — 150% of 2h estimate
     poll_interval: 60
     image: "huggingface/transformers-pytorch-gpu:latest"
     repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
@@ -278,7 +301,7 @@ vision_model:
 
 rl_training:
   grpo:
-    base_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-aggressive-full1
+    base_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-vision-sft
     dapt_adapter: ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
     base_model: "google/gemma-4-26B-A4B-it"
     prompt_dataset: ${HF_USERNAME}/code-trainer-v10-grpo-prompts
@@ -314,7 +337,7 @@ rl_training:
   # Launch with: python -m src.phase4c_rl.scripts.launch_farca_grpo \
   #     --config src/config/pipeline-gemma26b.yml --wait
   farca_grpo:
-    base_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-aggressive-full1
+    base_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-vision-sft
     dapt_adapter: ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
     base_model: "google/gemma-4-26B-A4B-it"
     prompt_dataset: ${HF_USERNAME}/code-trainer-v10-grpo-prompts
@@ -370,12 +393,14 @@ gemma_deployment:
   quantization: "Q4_K_M"
   context_length: 4096
   port: 8080
-  gguf_repo: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-gguf
+  gguf_repo: ${HF_USERNAME}/gemma26b-offsec-coder-gguf
   source_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-dpo
   adapter_chain:
     - ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
     - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-aggressive-full1
+    - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-vision-sft
   base_model: "google/gemma-4-26B-A4B-it"
+  enable_vision: true              # use Gemma4ForConditionalGeneration for merge
   cloud:
     hardware: "a100-large"
     timeout_seconds: 4050          # 67.5min — 150% of 45min estimate
@@ -399,7 +424,10 @@ abliteration:
   adapter_chain:
     - ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
     - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-aggressive-full1
+    - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-vision-sft
+  enable_vision: true
   output_base: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer
+  abliterated_gguf_repo: ${HF_USERNAME}/gemma26b-offsec-coder-abliterated-gguf
 
   techniques:
     - name: nousresearch           # fastest — no Optuna, pure matrix projection

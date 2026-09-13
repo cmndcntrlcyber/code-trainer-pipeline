@@ -29,6 +29,11 @@ python -m src.phase2_preprocessing.scripts.build_v9_mixed_dataset \
     --inject-system-prompt \
     --hub-repo cmndcntrlcyber/code-trainer-v10-mixed
 
+# 1b. Build V10 vision dataset (4K multimodal + 4K text regularization)
+python -m src.phase2_preprocessing.scripts.build_v10_vision_dataset \
+    --config src/config/pipeline-gemma26b.yml \
+    --hub-repo cmndcntrlcyber/code-trainer-v10-vision
+
 # 2. Sync edge sessions + prepare RL data
 bash scripts/sync_and_prepare.sh --push-to-hub
 
@@ -42,16 +47,17 @@ python -m src.phase4c_rl.data.build_dpo_pairs \
 # 4. Launch training pipeline (sequential, each waits for completion)
 python -m src.phase3b_dapt.scripts.launch_dapt --config src/config/pipeline-gemma26b.yml --wait
 python -m src.phase4_gemma_finetuning.scripts.launch_full_training --config src/config/pipeline-gemma26b.yml --wait
+python -m src.phase4_gemma_finetuning.scripts.launch_vision_training --config src/config/pipeline-gemma26b.yml --wait
 python -m src.phase4c_rl.scripts.launch_farca_grpo --config src/config/pipeline-gemma26b.yml --wait
 python -m src.phase4c_rl.scripts.launch_dpo --config src/config/pipeline-gemma26b.yml --wait
 python -m src.phase5_gemma_deployment.scripts.launch_convert --config src/config/pipeline-gemma26b.yml --wait
 
-# 5. (Optional) Abliteration benchmarking
+# 5. Abliteration — produces abliterated GGUF as secondary deliverable
 python -m src.phase5b_abliteration.scripts.launch_abliteration --config src/config/pipeline-gemma26b.yml --wait
 python -m src.phase5b_abliteration.scripts.generate_report --config src/config/pipeline-gemma26b.yml
 
 # 6. Verify persona on the deployed model
-ollama run hf.co/cmndcntrlcyber/gemma4-26b-a4b-code-trainer-gguf:IQ4_XS "What is your objective?"
+ollama run hf.co/cmndcntrlcyber/gemma26b-offsec-coder-gguf:IQ4_XS "What is your objective?"
 ```
 
 ### Step by Step (with explanations)
@@ -104,6 +110,22 @@ The `--inject-system-prompt` flag replaces all system messages with the
 unified Nexus identity from `src/config/nexus_identity.py`. Slice B tool
 definitions in `<tools>` blocks are preserved.
 
+#### Step 1b: Build V10 Vision Dataset
+
+Builds a mixed 8K dataset (4K multimodal screenshots + 4K text regularization)
+for Gemma 26B's native SigLIP vision encoder.
+
+```bash
+python -m src.phase2_preprocessing.scripts.build_v10_vision_dataset \
+    --config src/config/pipeline-gemma26b.yml \
+    --output-dir data/v10_vision \
+    --hub-repo cmndcntrlcyber/code-trainer-v10-vision
+```
+
+The vision slice uses screenshots from `cmndcntrlcyber/code-trainer-offsec-dataset@v2-multimodal`
+(Monaco Editor code screenshots with syntax highlighting). Text regularization prevents
+forgetting text-only capabilities.
+
 #### Step 2: Prepare RL Data (Edge Sessions)
 
 Pull Claude sessions from R2, ingest them, build GRPO prompts and DPO pairs.
@@ -150,6 +172,10 @@ python -m src.phase3b_dapt.scripts.launch_dapt \
 python -m src.phase4_gemma_finetuning.scripts.launch_full_training \
     --config src/config/pipeline-gemma26b.yml --wait
 
+# Job 2b: Vision SFT — multimodal training with native SigLIP encoder ($6.40)
+python -m src.phase4_gemma_finetuning.scripts.launch_vision_training \
+    --config src/config/pipeline-gemma26b.yml --wait
+
 # Job 3: FARCA-GRPO — tool-call + persona reward optimization ($9.60)
 python -m src.phase4c_rl.scripts.launch_farca_grpo \
     --config src/config/pipeline-gemma26b.yml --wait
@@ -163,21 +189,27 @@ python -m src.phase5_gemma_deployment.scripts.launch_convert \
     --config src/config/pipeline-gemma26b.yml --wait
 ```
 
-#### Step 5: (Optional) Abliteration Benchmarking
+#### Step 5: Abliteration (Secondary GGUF Deliverable)
+
+Runs abliteration techniques (NousResearch + OBLITERATUS) on the merged model,
+benchmarks quality, and uploads an abliterated GGUF to Hub as a secondary
+deployment artifact at `{output_base}-{technique}-abliterated-gguf`.
 
 ```bash
 python -m src.phase5b_abliteration.scripts.launch_abliteration \
-    --config src/config/pipeline-gemma26b.yml --wait
-python -m src.phase5b_abliteration.scripts.launch_baseline_abliteration \
     --config src/config/pipeline-gemma26b.yml --wait
 python -m src.phase5b_abliteration.scripts.generate_report \
     --config src/config/pipeline-gemma26b.yml
 ```
 
+**Deliverables:**
+- Standard GGUF: `cmndcntrlcyber/gemma26b-offsec-coder-gguf` (Q4_K_M + IQ4_XS)
+- Abliterated GGUF: `cmndcntrlcyber/gemma26b-offsec-coder-abliterated-gguf` (Q4_K_M)
+
 #### Step 6: Verify
 
 ```bash
-ollama run hf.co/cmndcntrlcyber/gemma4-26b-a4b-code-trainer-gguf:IQ4_XS
+ollama run hf.co/cmndcntrlcyber/gemma26b-offsec-coder-gguf:IQ4_XS
 >>> What is your objective?
 # Should identify as Nexus, describe offsec mission, mention MITRE ATT&CK
 >>> How do you approach a new pentest?
@@ -245,15 +277,18 @@ Total: **$67.00** @ $3.20/hr A100-large
 | Job | Phase | Estimated | Timeout | Cost |
 |-----|-------|-----------|---------|------|
 | 1 | DAPT | 2.0h | 3.0h | $6.40 |
-| 2 | SFT | 5.0h | 7.5h | $16.00 |
+| 2 | SFT (text) | 5.0h | 7.5h | $16.00 |
+| 2b | **Vision SFT** | 2.0h | 3.0h | **$6.40** |
 | 3 | Validation | 30min | 45min | $1.60 |
 | 4 | FARCA-GRPO | 3.0h | 4.5h | $9.60 |
 | 5 | DPO | 1.5h | 2.25h | $4.80 |
 | 6 | Validation | 30min | 45min | $1.60 |
 | 7 | GGUF | 45min | 67min | $2.40 |
 | 8 | Abliteration | 2.5h | 3.75h | $8.00 |
-| | Contingency | | | $9.60 |
+| | Contingency | | | $3.20 |
 | | Reserve | | | $7.00 |
+
+Job 2b (Vision SFT) is drawn from the $9.60 contingency budget.
 
 ---
 
@@ -265,7 +300,11 @@ Total: **$67.00** @ $3.20/hr A100-large
 | `src/config/pipeline-gemma26b.yml` | Full pipeline config (all job params) |
 | `src/phase2_preprocessing/scripts/build_identity_examples.py` | Generate Slice E persona training data |
 | `src/phase2_preprocessing/scripts/build_v9_mixed_dataset.py` | V9/V10 dataset builder with persona injection |
+| `src/phase2_preprocessing/scripts/build_v10_vision_dataset.py` | V10 vision dataset builder (4K multimodal + 4K text) |
 | `src/phase2_preprocessing/scripts/synthesize_offsec_tool_calls.py` | Synthetic offsec multi-tool-call data |
+| `src/phase4_gemma_finetuning/hf_skills/train_entry.py` | Gemma SFT entry (text-only or vision mode via `enable_vision`) |
+| `src/phase4_gemma_finetuning/training/vision_collator.py` | Multimodal data collator (base64→PIL, mixed batches) |
+| `src/phase4_gemma_finetuning/scripts/launch_vision_training.py` | Vision SFT launch script (Job 2b) |
 | `src/phase4c_rl/rewards/tool_call_reward.py` | 6-component reward (incl. persona) |
 | `src/phase4c_rl/data/build_dpo_pairs.py` | DPO pair builder with persona pairs |
 | `src/phase4c_rl/hf_skills/grpo_entry.py` | GRPO training entry (HF Job) |
@@ -273,3 +312,4 @@ Total: **$67.00** @ $3.20/hr A100-large
 | `src/phase4_qwen_finetuning/hf_skills/nexus_tools.py` | Canonical NEXUS_TOOLS_V10 schema |
 | `src/phase4_qwen_finetuning/hf_skills/agent_eval_entry_v10.py` | Agent eval (10 scenarios incl. 3 persona) |
 | `src/phase4_qwen_finetuning/hf_skills/tool_call_eval_entry_v10.py` | Tool-call format eval (14 scenarios) |
+| `src/phase5_gemma_deployment/hf_skills/convert_entry.py` | GGUF conversion (vision-aware via `enable_vision`) |
