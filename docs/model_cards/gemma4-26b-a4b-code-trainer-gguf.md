@@ -44,6 +44,11 @@ even with partial CPU offload.
 
 * **Local inference** via `llama-server`, Ollama, LM Studio, or
   text-generation-webui on an RTX 5060 Ti 16 GB.
+* **Nexus persona:** The model is trained to operate as "Nexus" — an advanced
+  cyber threat emulation agent with MITRE ATT&CK alignment, scope-first
+  methodology, and tool-calling fluency. Identity is reinforced at every
+  training stage (SFT system prompts, identity examples, RL reward shaping,
+  DPO preference pairs).
 * **Q4_K_M** for maximum quality (28/30 layers on GPU, ~15-25 tok/s
   generation, ctx_size=4096).
 * **IQ4_XS** when full GPU residency is required (all 30 layers on GPU,
@@ -78,9 +83,14 @@ google/gemma-4-26B-A4B-it
 ## Evaluation
 
 Quality is inherited from the source adapter chain. The final adapter is
-DPO (preference-aligned on 870 pairs from real OCO sessions). The SFT
-foundation uses the V9 mixed dataset. The FARCA-GRPO stage optimizes
-tool-call formatting with factuality grounding.
+DPO (preference-aligned on OCO sessions + Nexus persona pairs). The SFT
+foundation uses the V10 mixed dataset with unified Nexus system prompt
+injection across all ~47K examples. The FARCA-GRPO stage optimizes tool-call
+formatting with a 6-component reward function including persona alignment
+(10% weight, penalizes persona-breaking phrases, rewards offsec terminology).
+
+Persona is defined centrally in `src/config/nexus_identity.py` and enforced
+at every stage. See `docs/PIPELINE.md` for the complete training workflow.
 
 ## Chat template
 

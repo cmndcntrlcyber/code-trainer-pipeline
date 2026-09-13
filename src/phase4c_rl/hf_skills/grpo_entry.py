@@ -105,17 +105,8 @@ def main():
     logger.info("Loading prompt dataset: %s", prompt_dataset)
     ds = load_dataset(prompt_dataset, split="train")
 
-    # Build system prompt for tool-call context.
-    system_prompt = (
-        "You are Nexus, a local-first coding agent with direct filesystem and "
-        "shell access. Call tools with JSON arguments matching each tool's schema:\n"
-        + "\n".join(
-            f"- {t['function']['name']}: {t['function']['description']}"
-            for t in NEXUS_TOOLS_V10
-        )
-        + "\n\nWhen the task is complete, reply with a final message and do "
-        "not request any more tool calls."
-    )
+    from src.config.nexus_identity import build_nexus_system_prompt
+    system_prompt = build_nexus_system_prompt(NEXUS_TOOLS_V10)
 
     def format_prompt(example):
         messages = [

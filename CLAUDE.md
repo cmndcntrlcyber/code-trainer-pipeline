@@ -4,9 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Code-Trainer** (RTPI — Real-Time Pipeline Intelligence) is a multi-phase pipeline to build and deploy a fine-tuned Qwen2.5-Coder-14B model for offensive security tool-use and multi-step reasoning on an RTX 5060 Ti 16GB (Blackwell). Training runs on HF Jobs A100-large; the local GPU is for inference only.
+**Code-Trainer** (RTPI — Real-Time Pipeline Intelligence) is a multi-phase pipeline to build and deploy fine-tuned models (Qwen2.5-Coder-14B, Gemma-4-26B-A4B-it) for offensive security tool-use and multi-step reasoning on an RTX 5060 Ti 16GB (Blackwell). Training runs on HF Jobs A100-large; the local GPU is for inference only.
 
-All scripts are run from the project root (`/mnt/ssd/training/`). Config is loaded via `src/config/config.yaml` (or `src/config/pipeline-50.yml` for the $50 pipeline run). Required environment variables are in `.env` (see `.env.example`).
+The model persona is "Nexus" — an advanced cyber threat emulation agent. The persona definition lives in `src/config/nexus_identity.py` (single source of truth) and is injected into all training data, RL stages, and evaluation. See `docs/PIPELINE.md` for the complete pipeline usage guide.
+
+All scripts are run from the project root (`/mnt/ssd/training/`). Config is loaded via `src/config/config.yaml` (Qwen), `src/config/pipeline-50.yml` (Qwen $50 run), or `src/config/pipeline-gemma26b.yml` (Gemma $67 run). Required environment variables are in `.env` (see `.env.example`).
 
 ## Required Environment Variables
 
@@ -105,6 +107,37 @@ python -m src.phase4c_rl.scripts.launch_farca_grpo --config src/config/pipeline-
 python -m src.phase4c_rl.scripts.launch_farca_grpo --config src/config/pipeline-gemma26b.yml --wait  # Gemma
 ```
 
+**Generate Nexus persona training data (Slice E):**
+```bash
+python -m src.phase2_preprocessing.scripts.build_identity_examples --output data/identity_examples/nexus_identity.jsonl --count 400
+```
+
+**Build V10 mixed dataset with persona injection:**
+```bash
+python -m src.phase2_preprocessing.scripts.build_v9_mixed_dataset \
+    --config src/config/pipeline-gemma26b.yml \
+    --identity-examples data/identity_examples/nexus_identity.jsonl \
+    --inject-system-prompt \
+    --hub-repo cmndcntrlcyber/code-trainer-v10-mixed
+```
+
+**Build DPO pairs with persona pairs:**
+```bash
+python -m src.phase4c_rl.data.build_dpo_pairs \
+    --negatives-dir data/rl_negatives --positives-dir data/oco_converted \
+    --identity-examples data/identity_examples/nexus_identity.jsonl \
+    --push-to-hub --config src/config/pipeline-gemma26b.yml
+```
+
+**Run the full Gemma 26B pipeline (see `docs/PIPELINE.md` for details):**
+```bash
+python -m src.phase3b_dapt.scripts.launch_dapt --config src/config/pipeline-gemma26b.yml --wait
+python -m src.phase4_gemma_finetuning.scripts.launch_full_training --config src/config/pipeline-gemma26b.yml --wait
+python -m src.phase4c_rl.scripts.launch_farca_grpo --config src/config/pipeline-gemma26b.yml --wait
+python -m src.phase4c_rl.scripts.launch_dpo --config src/config/pipeline-gemma26b.yml --wait
+python -m src.phase5_gemma_deployment.scripts.launch_convert --config src/config/pipeline-gemma26b.yml --wait
+```
+
 **Run via Docker (Xvfb provided by entrypoint):**
 ```bash
 cd src/phase1_data_collection/docker
@@ -131,8 +164,8 @@ black .
 - Phase 3: Infrastructure complete — Swin-B vision model awaiting Hub dataset
 - Phase 3b: Infrastructure complete — DAPT on offsec corpus (`src/phase3b_dapt/`)
 - Phase 4 (Qwen): V7–V9 SFT complete — V10 pending Phase 4c RL data
-- Phase 4 (Gemma): Infrastructure complete — Gemma-4-12B-it parallel track (`src/phase4_gemma_finetuning/`)
-- Phase 4c: Infrastructure complete — GRPO + DPO + FARCA-GRPO scripts, reward function, session ingestion (`src/phase4c_rl/`)
+- Phase 4 (Gemma): Infrastructure complete — Gemma-4-26B-A4B-it pipeline with Nexus persona (`src/phase4_gemma_finetuning/`)
+- Phase 4c: Infrastructure complete — GRPO + DPO + FARCA-GRPO scripts, 6-component reward function (incl. persona), session ingestion (`src/phase4c_rl/`)
 - Phase 5 (Qwen): V8 GGUF complete — Q5_K_M default (`src/phase5_deployment/`)
 - Phase 5 (Gemma): Infrastructure complete (`src/phase5_gemma_deployment/`)
 - Phase 5b: Infrastructure complete — abliteration benchmarking with baseline support (`src/phase5b_abliteration/`)
@@ -162,8 +195,10 @@ GitHubScraper → SQLiteCatalog → FileFilter → ScreenshotManager → Paralle
 
 **`src/config/`**
 - `settings.py` — YAML loader with `${VAR}` environment variable substitution.
+- `nexus_identity.py` — Central Nexus persona definition (single source of truth). Exports `NEXUS_IDENTITY`, `build_nexus_system_prompt()`, `OFFSEC_TERMS`, `PERSONA_BREAK_PHRASES`, `SKILLS_INDEX`, `SUBAGENTS_INDEX`. Imported by all training, eval, and data prep scripts.
 - `config.yaml` — Central config for all phases. Target: 500 repos/language × 8 languages = 4,000 repos, 50,000+ captures.
-- `pipeline-50.yml` — $50 full pipeline run config (8 sequential jobs with validation gates, contingency budget).
+- `pipeline-50.yml` — Qwen $50 full pipeline run config (8 sequential jobs with validation gates, contingency budget).
+- `pipeline-gemma26b.yml` — Gemma 26B $67 pipeline config (includes Slice E identity data, persona DPO pairs, system prompt injection).
 - `budget-config.yml` — Budget-constrained variant with reduced hyperparameters.
 
 ### Capture Output Structure

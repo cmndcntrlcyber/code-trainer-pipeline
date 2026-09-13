@@ -6,6 +6,7 @@ __pycache__
 *.log
 *.pid
 .wrangler/
+.claude/settings.local.json
 
 # Large binary files — never commit these
 *.gguf
@@ -81,3 +82,7 @@ data/oco_converted/
 data/rl_training/
 data/rl_data/
 data/dpo_pairs/
+data/identity_examples/
+
+# Local-only pipeline runbook (contains absolute paths)
+docs/.PIPELINE.md

@@ -4,7 +4,9 @@
 
 ## Overview
 
-**Code-Trainer** (RTPI — Real-Time Pipeline Intelligence) is a multi-phase pipeline to build and deploy a fine-tuned Qwen2.5-Coder-14B model for offensive security tool-use and multi-step reasoning, served locally on an RTX 5060 Ti 16GB (Blackwell). Training runs on HF Jobs A100-large; the local GPU is for inference only.
+**Code-Trainer** (RTPI — Real-Time Pipeline Intelligence) is a multi-phase pipeline to build and deploy fine-tuned models (Qwen2.5-Coder-14B, Gemma-4-26B-A4B-it) for offensive security tool-use and multi-step reasoning, served locally on an RTX 5060 Ti 16GB (Blackwell). Training runs on HF Jobs A100-large; the local GPU is for inference only.
+
+The model ships with the **Nexus** persona — an advanced cyber threat emulation agent that operates with the mindset of a veteran penetration tester, aligned with the MITRE ATT&CK framework. The persona is enforced at every pipeline stage: SFT dataset system prompts, identity training examples, RL reward shaping, DPO preference pairs, and evaluation gates.
 
 ### Pipeline Phases
 
@@ -17,8 +19,8 @@
 | 3 | Vision Model | Infrastructure complete | Swin-B + MLP projector + Qwen2.5-Coder-1.5B LoRA |
 | 3b | DAPT | Infrastructure complete | Domain-adaptive continued pretraining on offsec corpus |
 | 4 | SFT | V7–V9 complete | Qwen-14B LoRA instruction tuning (V9 mixed dataset: offsec + tool-calling + agent traces + instruction) |
-| 4 (Gemma) | Gemma SFT | Infrastructure complete | Gemma-4-12B-it parallel training track |
-| 4c | Chain-of-Thought RL | Infrastructure complete | GRPO (rule-based reward) + DPO (OCO preference pairs) |
+| 4 (Gemma) | Gemma SFT | Infrastructure complete | Gemma-4-26B-A4B-it parallel track with Nexus persona injection |
+| 4c | Chain-of-Thought RL | Infrastructure complete | GRPO (6-component reward incl. persona) + DPO (OCO + persona pairs) |
 | 5 | GGUF Deployment | V8 complete | LoRA merge → Q5_K_M quantization → llama.cpp/Ollama |
 | 5 (Gemma) | Gemma GGUF | Infrastructure complete | Gemma-4-12B-it GGUF conversion |
 | 5b | Abliteration | Infrastructure complete | Refusal removal benchmarking (OBLITERATUS, NousResearch, abliterix) |
@@ -61,15 +63,17 @@ root/
 ├── src/
 │   ├── config/
 │   │   ├── settings.py            # YAML loader with ${VAR} env substitution
+│   │   ├── nexus_identity.py      # Central Nexus persona (single source of truth)
 │   │   ├── config.yaml            # Central config for all phases
-│   │   ├── pipeline-50.yml        # $50 full pipeline run config (8 jobs, validation gates)
+│   │   ├── pipeline-50.yml        # Qwen $50 full pipeline run config
+│   │   ├── pipeline-gemma26b.yml  # Gemma 26B $67 pipeline config (with persona)
 │   │   └── budget-config.yml      # Budget-constrained config variant
 │   │
 │   ├── phase1_data_collection/    # Phase 1: GitHub scraping + Monaco screenshots [COMPLETE]
 │   ├── phase1_repo_ingestion/     # Phase 1c: Stars-based repo cloning [COMPLETE]
 │   │
 │   ├── phase2_preprocessing/      # Phase 2: HF dataset build + Hub upload [COMPLETE]
-│   │   └── scripts/               # build_dataset, build_v7/v8/v9_mixed_dataset, upload_to_hub
+│   │   └── scripts/               # build_dataset, build_v7/v8/v9_mixed_dataset, build_identity_examples, upload_to_hub
 │   │
 │   ├── phase3_vision_model/       # Phase 3: Swin-B + MLP + Qwen-1.5B LoRA
 │   ├── phase3b_dapt/              # Phase 3b: Domain-adaptive continued pretraining
@@ -85,10 +89,10 @@ root/
 │   ├── phase4_gemma_finetuning/   # Phase 4 (Gemma): Gemma-4-12B-it SFT
 │   │
 │   ├── phase4c_rl/                # Phase 4c: Chain-of-thought RL (GRPO + DPO)
-│   │   ├── data/                  # ingest_oco_sessions, build_dpo_pairs, build_grpo_prompts, collect_negatives
-│   │   ├── rewards/               # tool_call_reward.py (5-component rule-based reward)
-│   │   ├── hf_skills/             # grpo_entry.py, dpo_entry.py
-│   │   └── scripts/               # launch_grpo.py, launch_dpo.py
+│   │   ├── data/                  # ingest_oco_sessions, build_dpo_pairs (+ persona pairs), build_grpo_prompts, collect_negatives
+│   │   ├── rewards/               # tool_call_reward.py (6-component reward incl. persona alignment)
+│   │   ├── hf_skills/             # grpo_entry.py, farca_grpo_entry.py, dpo_entry.py
+│   │   └── scripts/               # launch_grpo.py, launch_farca_grpo.py, launch_dpo.py
 │   │
 │   ├── phase5_deployment/         # Phase 5: LoRA merge → GGUF Q5_K_M → llama.cpp
 │   ├── phase5_gemma_deployment/   # Phase 5 (Gemma): Gemma GGUF conversion
@@ -117,53 +121,62 @@ playwright install chromium   # Required for screenshot capture
 
 ## Usage
 
-All commands run from the project root (`/mnt/ssd/training/`).
+All commands run from the project root (`/mnt/ssd/training/`). For the
+complete step-by-step guide with explanations, see [`docs/PIPELINE.md`](docs/PIPELINE.md).
 
 ```bash
 set -a && source .env && set +a   # Load environment variables
 
-# --- Phase 1: Data Collection ---
+# ═══ Gemma 26B Pipeline (recommended — with Nexus persona) ═══
 
+# Data prep (local, free)
+python -m src.phase2_preprocessing.scripts.build_identity_examples --output data/identity_examples/nexus_identity.jsonl --count 400
+python -m src.phase2_preprocessing.scripts.build_v9_mixed_dataset --config src/config/pipeline-gemma26b.yml --identity-examples data/identity_examples/nexus_identity.jsonl --inject-system-prompt --hub-repo cmndcntrlcyber/code-trainer-v10-mixed
+bash scripts/sync_and_prepare.sh --push-to-hub
+python -m src.phase4c_rl.data.build_dpo_pairs --negatives-dir data/rl_negatives --positives-dir data/oco_converted --identity-examples data/identity_examples/nexus_identity.jsonl --push-to-hub --config src/config/pipeline-gemma26b.yml
+
+# Training (HF Jobs A100, ~$50 total)
+python -m src.phase3b_dapt.scripts.launch_dapt --config src/config/pipeline-gemma26b.yml --wait
+python -m src.phase4_gemma_finetuning.scripts.launch_full_training --config src/config/pipeline-gemma26b.yml --wait
+python -m src.phase4c_rl.scripts.launch_farca_grpo --config src/config/pipeline-gemma26b.yml --wait
+python -m src.phase4c_rl.scripts.launch_dpo --config src/config/pipeline-gemma26b.yml --wait
+python -m src.phase5_gemma_deployment.scripts.launch_convert --config src/config/pipeline-gemma26b.yml --wait
+
+# Verify
+ollama run hf.co/cmndcntrlcyber/gemma4-26b-a4b-code-trainer-gguf:IQ4_XS "What is your objective?"
+
+# ═══ Qwen 14B Pipeline (legacy) ═══
+
+# Phase 1: Data Collection
 python -m src.phase1_data_collection.scripts.run_collection --config src/config/config.yaml
 python -m src.phase1_data_collection.scripts.validate_samples --config src/config/config.yaml
 
-# --- Phase 2: Preprocessing ---
-
+# Phase 2: Preprocessing
 python -m src.phase2_preprocessing.scripts.build_dataset --config src/config/config.yaml
 python -m src.phase2_preprocessing.scripts.upload_to_hub --config src/config/config.yaml
 
-# --- Phase 3b: DAPT (HF Jobs A100) ---
-
+# Phase 3b: DAPT
 python -m src.phase3b_dapt.scripts.launch_dapt --config src/config/pipeline-50.yml --wait
 
-# --- Phase 4: SFT (HF Jobs A100) ---
-
+# Phase 4: SFT
 python -m src.phase4_qwen_finetuning.scripts.launch_validation_sweep --config src/config/config.yaml
 python -m src.phase4_qwen_finetuning.scripts.launch_v9_training --config src/config/config.yaml --wait
 
-# --- Phase 4c: Chain-of-Thought RL ---
-
-# Prepare session data
-mkdir -p data/cot_rl_sessions/{htb,thm,claude,bugbounty} data/oco_converted data/rl_data/{positives,negatives} && bash scripts/pull_sessions_from_r2.sh
-
-# Ingest and convert sessions
-python -m src.phase4c_rl.data.ingest_oco_sessions --input-dir data/cot_rl_sessions --output-dir data/oco_converted --format json
-
-# Launch RL training (HF Jobs A100)
+# Phase 4c: Chain-of-Thought RL
+bash scripts/sync_and_prepare.sh --push-to-hub
 python -m src.phase4c_rl.scripts.launch_grpo --config src/config/pipeline-50.yml --wait
 python -m src.phase4c_rl.scripts.launch_dpo --config src/config/pipeline-50.yml --wait
 
-# --- Phase 5: GGUF Deployment ---
-
+# Phase 5: GGUF Deployment
 python -m src.phase5_deployment.scripts.launch_convert --config src/config/config.yaml --wait
 
-# --- Phase 5b: Abliteration Benchmarking ---
+# ═══ Common ═══
 
+# Abliteration benchmarking
 python -m src.phase5b_abliteration.scripts.launch_abliteration --config src/config/config.yaml --wait
-python -m src.phase5b_abliteration.scripts.launch_baseline_abliteration --config src/config/config.yaml --wait
 python -m src.phase5b_abliteration.scripts.generate_report --config src/config/config.yaml
 
-# --- Tests ---
+# Tests
 uv run pytest tests/
 ```
 

@@ -37,12 +37,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from datasets import Dataset, DatasetDict, load_dataset
 
+from src.config.nexus_identity import NEXUS_IDENTITY, build_nexus_system_prompt
 from src.config.settings import load_config
 from src.phase2_preprocessing.converters.tool_format_converter import (
     convert_fable5_messages_to_hermes,
     detect_tools_in_messages,
     validate_messages,
 )
+from src.phase4_qwen_finetuning.hf_skills.nexus_tools import NEXUS_TOOLS_V10
 
 logging.basicConfig(
     level=logging.INFO,
@@ -657,6 +659,83 @@ def validate_tag_completeness(records: list[dict]) -> list[dict]:
     return valid
 
 
+# ── Slice E: Identity/persona examples ───────────────────────────────────
+
+
+def load_slice_e(identity_path: str) -> list[dict]:
+    """Load pre-generated identity/persona examples from JSONL."""
+    path = Path(identity_path)
+    if not path.exists():
+        logger.warning("Identity examples not found at %s; skipping Slice E", path)
+        return []
+
+    records = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            rec = json.loads(line)
+            if not validate_messages(rec.get("messages", [])):
+                continue
+            records.append(rec)
+
+    logger.info("  Slice E: %d identity examples from %s", len(records), path)
+    return records
+
+
+# ── System prompt injection ──────────────────────────────────────────────
+
+
+def inject_nexus_system_prompt(records: list[dict], preserve_tools: bool = True) -> list[dict]:
+    """Replace or prepend the Nexus identity into every record's system message.
+
+    When preserve_tools is True and the existing system message contains a
+    <tools> block, the Nexus identity is prepended before the tools block
+    rather than replacing the entire message.
+    """
+    nexus_prompt = build_nexus_system_prompt(NEXUS_TOOLS_V10)
+    injected = 0
+
+    for record in records:
+        messages = record.get("messages", [])
+        if not messages:
+            continue
+
+        # Find or create system message
+        sys_idx = None
+        for i, msg in enumerate(messages):
+            if msg["role"] == "system":
+                sys_idx = i
+                break
+
+        if sys_idx is not None:
+            old_content = messages[sys_idx]["content"]
+
+            if preserve_tools and "<tools>" in old_content:
+                # Extract the tools block and everything after it
+                tools_start = old_content.index("<tools>")
+                # Find the preamble text before the tools section header
+                # Look for "# Tools" header preceding <tools>
+                header_idx = old_content.rfind("# Tools", 0, tools_start)
+                if header_idx > 0:
+                    tools_section = old_content[header_idx:]
+                else:
+                    tools_section = old_content[tools_start:]
+                messages[sys_idx]["content"] = f"{NEXUS_IDENTITY}\n\n{tools_section}"
+            else:
+                messages[sys_idx]["content"] = nexus_prompt
+            injected += 1
+        else:
+            # No system message exists — insert one at position 0
+            messages.insert(0, {"role": "system", "content": nexus_prompt})
+            record["n_turns"] = len(messages)
+            injected += 1
+
+    logger.info("  System prompt injection: %d records updated", injected)
+    return records
+
+
 # ── Build pipeline ────────────────────────────────────────────────────────
 
 
@@ -719,6 +798,10 @@ def main():
     parser.add_argument("--slice-d-size", type=int, default=8000)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--hub-repo", default=None)
+    parser.add_argument("--identity-examples", default=None,
+                        help="JSONL file of identity/persona examples (Slice E)")
+    parser.add_argument("--inject-system-prompt", action="store_true",
+                        help="Replace all system prompts with the unified Nexus persona")
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -733,6 +816,11 @@ def main():
     logger.info("  Slice B+: multi-call synthetic (%d)", args.slice_b_multi)
     logger.info("  Slice C: agent traces (%d)", args.slice_c_size)
     logger.info("  Slice D: instruction (%d)", args.slice_d_size)
+    identity_path = args.identity_examples or v9_cfg.get("slice_e", {}).get("source")
+    if identity_path:
+        logger.info("  Slice E: identity (%s)", identity_path)
+    if args.inject_system_prompt:
+        logger.info("  ** System prompt injection ENABLED **")
     logger.info("  Hub repo: %s", hub_repo)
     logger.info("=" * 60)
 
@@ -771,15 +859,24 @@ def main():
         args.slice_d_size, args.seed,
     )
 
-    all_records = records_a + records_b + records_b_multi + records_c + records_d
-    logger.info("Total before post-processing: %d (A=%d B=%d B+=%d C=%d D=%d)",
+    # Slice E: identity/persona examples
+    records_e = []
+    if identity_path:
+        records_e = load_slice_e(identity_path)
+
+    all_records = records_a + records_b + records_b_multi + records_c + records_d + records_e
+    logger.info("Total before post-processing: %d (A=%d B=%d B+=%d C=%d D=%d E=%d)",
                 len(all_records), len(records_a), len(records_b),
-                len(records_b_multi), len(records_c), len(records_d))
+                len(records_b_multi), len(records_c), len(records_d), len(records_e))
 
     # V9 post-processing
     all_records = enforce_stop_after_tag(all_records)
     all_records = validate_tag_completeness(all_records)
     logger.info("Total after post-processing: %d", len(all_records))
+
+    # Inject unified Nexus system prompt across all records
+    if args.inject_system_prompt:
+        all_records = inject_nexus_system_prompt(all_records, preserve_tools=True)
 
     dataset_dict = build_dataset_dict(all_records, args.seed, val_ratio)
 

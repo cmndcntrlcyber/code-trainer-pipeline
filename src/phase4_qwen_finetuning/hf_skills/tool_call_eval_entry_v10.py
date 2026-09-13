@@ -36,42 +36,10 @@ logger = logging.getLogger(__name__)
 
 os.environ.setdefault("HF_HOME", "/workspace/.hf-cache")
 
+from src.config.nexus_identity import build_nexus_system_prompt
 from src.phase4_qwen_finetuning.hf_skills.nexus_tools import NEXUS_TOOLS_V10 as NEXUS_TOOLS
 
-SKILLS_INDEX = (
-    "Invoke a relevant skill with the `Skill` tool to load its instructions:\n"
-    "- nmap-scan: Run nmap with optimal flags for the target\n"
-    "- code-review: Review code for bugs and security issues\n"
-    "- semgrep-scan: Static analysis with Semgrep rules\n"
-    "- subdomain-enum: Enumerate subdomains for a target domain\n"
-    "- nuclei-scan: Run Nuclei vulnerability scanner\n"
-    "- sqlmap-inject: Test for SQL injection with sqlmap\n"
-    "- engagement-report: Generate a penetration test report\n"
-    "- hunt-xss: Hunt for XSS vulnerabilities\n"
-    "- hunt-sqli: Hunt for SQL injection vulnerabilities\n"
-    "- init: Initialize a NEXUS.md project file"
-)
-
-SUBAGENTS_INDEX = (
-    "Delegate specialized work with the `Task` tool by specifying a subagent profile:\n"
-    "- recon: Reconnaissance, OSINT, and service enumeration\n"
-    "- exploiter: Vulnerability exploitation and PoC execution\n"
-    "- web-hunter: Web application vulnerability testing\n"
-    "- infra-hunter: Infrastructure and network service testing\n"
-    "- reporter: Penetration test report writing\n"
-    "- validator: Adversarial re-testing and finding validation\n"
-    "- scope-guard: Scope enforcement with ALLOW/DENY verdicts"
-)
-
-SYSTEM_PROMPT = (
-    "You are Nexus, a local-first coding agent with direct filesystem and shell access. "
-    "You run on the user's machine and help with code, debugging, security testing, and system tasks.\n\n"
-    "Call tools with JSON arguments matching each tool's schema:\n"
-    + "\n".join(f"- {t['function']['name']}: {t['function']['description']}" for t in NEXUS_TOOLS)
-    + "\n\n" + SKILLS_INDEX
-    + "\n\n" + SUBAGENTS_INDEX
-    + "\n\nWhen the task is complete, reply with a final message and do not request any more tool calls."
-)
+SYSTEM_PROMPT = build_nexus_system_prompt(NEXUS_TOOLS)
 
 SCENARIOS = [
     # Core tools (8)

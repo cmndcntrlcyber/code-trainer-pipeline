@@ -15,6 +15,7 @@ import json
 import re
 from typing import Optional
 
+from src.config.nexus_identity import OFFSEC_TERMS, PERSONA_BREAK_PHRASES
 from src.phase4_qwen_finetuning.hf_skills.nexus_tools import NEXUS_TOOLS_V10
 
 # Pre-compute the set of valid tool names from the V10 schema.
@@ -33,11 +34,12 @@ ANY_TOOL_NAME_RE = re.compile(
 
 # Reward component weights.
 WEIGHTS = {
-    "has_valid_tool_call_tags": 0.30,
+    "has_valid_tool_call_tags": 0.25,
     "tool_name_in_schema": 0.20,
-    "has_reasoning_prefix": 0.20,
+    "has_reasoning_prefix": 0.15,
     "no_hallucinated_tools": 0.15,
     "ends_cleanly_after_tag": 0.15,
+    "persona_aligned_reasoning": 0.10,
 }
 
 
@@ -111,9 +113,32 @@ def _ends_cleanly_after_tag(response: str) -> float:
     return 1.0 if len(trailing) <= 5 else 0.0
 
 
+def _persona_aligned_reasoning(response: str) -> float:
+    """Score persona alignment of the reasoning prefix.
+
+    1.0 if offsec terms present AND no persona-breaking phrases.
+    0.5 if no persona-breaking phrases but no offsec terms.
+    0.0 if persona-breaking phrases detected.
+    """
+    lower = response.lower()
+
+    for phrase in PERSONA_BREAK_PHRASES:
+        if phrase in lower:
+            return 0.0
+
+    # Check the reasoning prefix (text before first tool call) for offsec terms.
+    idx = response.find("<tool_call>")
+    prefix = response[:idx].lower() if idx >= 0 else lower
+    words = set(re.findall(r"[a-z&]+", prefix))
+    if words & OFFSEC_TERMS:
+        return 1.0
+    return 0.5
+
+
 def tool_call_reward(
     completions: list[str],
     schema: Optional[list[dict]] = None,
+    persona_reward: bool = True,
     **kwargs,
 ) -> list[float]:
     """Score a batch of model completions for tool-call quality.
@@ -149,6 +174,8 @@ def tool_call_reward(
             + WEIGHTS["no_hallucinated_tools"] * _no_hallucinated_tools(response)
             + WEIGHTS["ends_cleanly_after_tag"] * _ends_cleanly_after_tag(response)
         )
+        if persona_reward:
+            score += WEIGHTS["persona_aligned_reasoning"] * _persona_aligned_reasoning(response)
         rewards.append(score)
 
     # Restore global.
@@ -160,6 +187,7 @@ def tool_call_reward(
 def tool_call_reward_detailed(
     response: str,
     schema: Optional[list[dict]] = None,
+    persona_reward: bool = True,
 ) -> dict:
     """Score a single response and return per-component breakdown.
 
@@ -177,6 +205,8 @@ def tool_call_reward_detailed(
         "no_hallucinated_tools": _no_hallucinated_tools(response),
         "ends_cleanly_after_tag": _ends_cleanly_after_tag(response),
     }
+    if persona_reward:
+        components["persona_aligned_reasoning"] = _persona_aligned_reasoning(response)
     total = sum(WEIGHTS[k] * v for k, v in components.items())
 
     VALID_TOOL_NAMES = original_valid

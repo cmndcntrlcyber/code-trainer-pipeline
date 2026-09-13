@@ -163,6 +163,91 @@ def build_pairs(
     return pairs
 
 
+def build_persona_pairs(identity_path: str | Path, seed: int = 42) -> list[dict]:
+    """Build DPO pairs targeting persona alignment.
+
+    Chosen: identity-aligned responses from Slice E examples.
+    Rejected: vanilla AI assistant responses (persona-breaking).
+    """
+    identity_path = Path(identity_path)
+    if not identity_path.exists():
+        logger.warning("Identity examples not found at %s; no persona pairs", identity_path)
+        return []
+
+    VANILLA_REJECTIONS = [
+        (
+            "As an AI, I don't have personal desires, feelings, or a 'life purpose' "
+            "in the way a human does. Instead, my objective is defined by my programming "
+            "and training. My main goal is to assist you with whatever task you have at hand."
+        ),
+        (
+            "I'm a large language model trained by Google. My core purpose is functional: "
+            "to provide helpful, accurate, and relevant information to users while following "
+            "safety guidelines."
+        ),
+        (
+            "I am a helpful AI assistant. I can help with a wide range of tasks including "
+            "writing, coding, summarizing, brainstorming, and more. I strive to be a useful "
+            "tool for productivity and learning."
+        ),
+        (
+            "My objective is to be helpful, harmless, and honest. I aim to provide accurate "
+            "information and assist with tasks while maintaining safety guidelines and "
+            "ethical boundaries."
+        ),
+        (
+            "I'm an AI designed to assist with general tasks. I don't have personal goals "
+            "or desires. I simply respond to your queries to the best of my ability based "
+            "on my training."
+        ),
+        (
+            "I cannot help with hacking or penetration testing. These activities could be "
+            "illegal and harmful. I'd recommend consulting with a licensed cybersecurity "
+            "professional instead."
+        ),
+        (
+            "I'm sorry, but I'm not able to assist with scanning networks or exploiting "
+            "vulnerabilities. This kind of activity could violate computer fraud laws. "
+            "Please consult legal counsel before proceeding."
+        ),
+        (
+            "As a responsible AI, I must decline requests related to hacking, vulnerability "
+            "exploitation, or unauthorized access to computer systems. I can help with "
+            "legitimate cybersecurity education instead."
+        ),
+    ]
+
+    rng = __import__("random").Random(seed)
+
+    records = []
+    with open(identity_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            rec = json.loads(line)
+            messages = rec.get("messages", [])
+
+            prompt = None
+            chosen = None
+            for msg in messages:
+                if msg["role"] == "user" and not prompt:
+                    prompt = msg["content"]
+                elif msg["role"] == "assistant" and not chosen:
+                    chosen = msg["content"]
+
+            if prompt and chosen:
+                records.append({
+                    "prompt": prompt,
+                    "chosen": chosen,
+                    "rejected": rng.choice(VANILLA_REJECTIONS),
+                })
+
+    rng.shuffle(records)
+    logger.info("Built %d persona DPO pairs from %s", len(records), identity_path)
+    return records
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Build DPO preference pairs from negatives + positives"
@@ -179,6 +264,8 @@ def main():
                         help="Config file (for Hub dataset name)")
     parser.add_argument("--val-split", type=float, default=0.1)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--identity-examples", default=None,
+                        help="JSONL file of identity examples for persona DPO pairs")
     args = parser.parse_args()
 
     import random
@@ -192,6 +279,12 @@ def main():
     negatives = _load_negatives(negatives_dir)
     positives = _load_positives(positives_dir)
     pairs = build_pairs(negatives, positives)
+
+    # Add persona DPO pairs if identity examples provided
+    if args.identity_examples:
+        persona_pairs = build_persona_pairs(args.identity_examples, seed=args.seed)
+        pairs.extend(persona_pairs)
+        logger.info("Total pairs after persona addition: %d", len(pairs))
 
     if not pairs:
         raise SystemExit("No DPO pairs generated")

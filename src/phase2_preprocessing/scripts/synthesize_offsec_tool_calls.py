@@ -39,6 +39,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
+from src.config.nexus_identity import build_nexus_system_prompt_with_xml_tools
 from src.phase4_qwen_finetuning.hf_skills.nexus_tools import NEXUS_TOOLS_V10
 
 logging.basicConfig(
@@ -67,28 +68,8 @@ DEFAULT_TOOL_WEIGHTS = {
     "Skill":      0.02,
 }
 
-# ── NEXUS tools system prompt (matches inference-time format) ───────────────
-
-NEXUS_SYSTEM_TEMPLATE = """You are an expert offensive security assistant with access to tools for penetration testing, vulnerability assessment, and security research. Always verify scope before engaging targets.
-
-# Tools
-
-You may call one or more functions to assist with the user query.
-
-You are provided with function signatures within <tools></tools> XML tags:
-<tools>
-{tool_json_lines}
-</tools>
-
-For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
-<tool_call>
-{{"name": <function-name>, "arguments": <args-json-object>}}
-</tool_call>"""
-
-
 def build_system_prompt() -> str:
-    tool_lines = "\n".join(json.dumps(t) for t in NEXUS_TOOLS_V10)
-    return NEXUS_SYSTEM_TEMPLATE.format(tool_json_lines=tool_lines)
+    return build_nexus_system_prompt_with_xml_tools(NEXUS_TOOLS_V10)
 
 
 # ── Supplemental argument templates for underrepresented tools ──────────────

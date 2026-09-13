@@ -115,6 +115,10 @@ v9_mixed:
   slice_d:
     source: teknium/OpenHermes-2.5
     max_rows: 8000
+  slice_e:
+    source: data/identity_examples/nexus_identity.jsonl
+    count: 400
+  inject_system_prompt: true
   val_split: 0.1
   seed: 42
   private: false
@@ -295,6 +299,8 @@ rl_training:
     max_pairs: 800                 # reduced from 1000 — budget + VRAM constraint
     ref_model_strategy: "peft_implicit"  # ref_model=None — PEFT handles it
     output_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-dpo
+    include_persona_pairs: true
+    persona_pairs_path: data/identity_examples/nexus_identity.jsonl
 
   # FARCA-GRPO: Fact-Aligned Reliability-Aware Credit Assignment
   # Optional alternative to standard GRPO (Job 4). Same budget.
@@ -335,8 +341,8 @@ rl_training:
     eval_loss_threshold: 0.60
     tool_call_pass_rate: 0.80      # tighter gate: must beat SFT's 0.75
     tool_call_scenarios: 14
-    agent_progress_threshold: 4    # must solve 4/7 agent scenarios
-    agent_scenarios: 7
+    agent_progress_threshold: 6    # must solve 6/10 agent scenarios (includes 3 persona)
+    agent_scenarios: 10
     gsm8k_threshold: 0.50
 
   cloud:
