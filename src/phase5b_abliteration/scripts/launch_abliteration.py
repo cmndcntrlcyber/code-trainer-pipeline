@@ -92,6 +92,10 @@ def main():
         "evaluation": eval_cfg,
         "quants": list(quants),
     }
+    if abl_cfg.get("abliterated_gguf_repo"):
+        params["abliterated_gguf_repo"] = abl_cfg["abliterated_gguf_repo"]
+    if abl_cfg.get("enable_vision"):
+        params["enable_vision"] = True
 
     env = {
         "PHASE5B_PARAMS_JSON": json.dumps(params),
