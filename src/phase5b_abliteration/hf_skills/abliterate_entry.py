@@ -61,6 +61,12 @@ def _install_dependencies():
         "--no-deps",
         "obliteratus", "abliterix", "lm-eval",
     ])
+    # lm-eval runtime deps not pulled by --no-deps
+    _run([
+        "uv", "pip", "install", "-q",
+        "--index-strategy", "unsafe-best-match",
+        "sacrebleu", "rouge-score", "immutabledict",
+    ])
 
 
 def _ensure_llama_cpp():

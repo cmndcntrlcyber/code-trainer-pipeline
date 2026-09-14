@@ -114,12 +114,26 @@ class NousResearchTechnique(AbliterationTechnique):
             tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
 
-        model = AutoModelForCausalLM.from_pretrained(
-            str(model_dir),
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-            trust_remote_code=True,
-        )
+        # Auto-detect architecture: Gemma4ForConditionalGeneration needs
+        # its own class; standard decoder-only models use AutoModelForCausalLM.
+        model_config = json.loads((model_dir / "config.json").read_text())
+        arch = model_config.get("architectures", [""])[0]
+        if "Gemma4ForConditionalGeneration" in arch:
+            from transformers import Gemma4ForConditionalGeneration
+            logger.info("NousResearch: detected Gemma4ForConditionalGeneration")
+            model = Gemma4ForConditionalGeneration.from_pretrained(
+                str(model_dir),
+                torch_dtype=torch.bfloat16,
+                device_map="auto",
+                trust_remote_code=True,
+            )
+        else:
+            model = AutoModelForCausalLM.from_pretrained(
+                str(model_dir),
+                torch_dtype=torch.bfloat16,
+                device_map="auto",
+                trust_remote_code=True,
+            )
         model.eval()
 
         logger.info("NousResearch: loading contrastive datasets...")
@@ -191,6 +205,29 @@ def _select_best_layer(
     return int(best)
 
 
+def _get_decoder_layers(model):
+    """Extract the transformer layer list from various model architectures.
+
+    Supports:
+      - model.model.layers (LlamaForCausalLM, Qwen2ForCausalLM, Gemma2ForCausalLM)
+      - model.language_model.model.layers (Gemma4ForConditionalGeneration)
+    """
+    # Standard decoder-only: model.model.layers
+    if hasattr(model, "model") and hasattr(model.model, "layers"):
+        return model.model.layers
+
+    # Gemma 4 conditional generation: model.language_model.model.layers
+    if hasattr(model, "language_model"):
+        lm = model.language_model
+        if hasattr(lm, "model") and hasattr(lm.model, "layers"):
+            return lm.model.layers
+
+    raise RuntimeError(
+        f"Unsupported architecture: {type(model).__name__} — could not find "
+        f"transformer layers at model.model.layers or model.language_model.model.layers"
+    )
+
+
 def _apply_ablation(
     model, refusal_dirs: torch.Tensor, method: str = "biprojected"
 ) -> None:
@@ -201,18 +238,11 @@ def _apply_ablation(
     down_proj). With biprojected method, restores the original Frobenius
     norm after projection to preserve magnitude.
     """
-    if not hasattr(model, "model") or not hasattr(model.model, "layers"):
-        raise RuntimeError(
-            f"Unsupported architecture: {type(model).__name__} — expected "
-            f"model.model.layers (LlamaForCausalLM, Qwen2ForCausalLM, "
-            f"Gemma2ForCausalLM, etc.). Found attributes: "
-            f"{[a for a in dir(model) if not a.startswith('_')][:20]}"
-        )
-
-    n_layers = len(model.model.layers)
+    layers = _get_decoder_layers(model)
+    n_layers = len(layers)
 
     for layer_idx in range(1, n_layers):
-        layer = model.model.layers[layer_idx]
+        layer = layers[layer_idx]
         r_hat = refusal_dirs[layer_idx + 1].to(layer.self_attn.o_proj.weight.device)
 
         attn_proj = getattr(layer.self_attn, "o_proj", None)
