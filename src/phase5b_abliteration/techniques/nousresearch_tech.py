@@ -265,10 +265,17 @@ def _apply_ablation(
             else:
                 continue
 
-            W = module.weight.data
+            W = module.weight.data  # (out_features, in_features)
             orig_norm = W.norm().item()
 
-            proj = torch.outer(W @ r_hat, r_hat)
+            # Remove the refusal direction from the output space of W.
+            # r_hat is in hidden_size space (= out_features for residual-writing weights).
+            # For square W: proj = outer(W @ r_hat, r_hat)
+            # For non-square W (e.g. Gemma4 o_proj): project rows onto r_hat directly.
+            if W.shape[0] == r_hat.shape[0]:
+                proj = torch.outer(r_hat, r_hat @ W)
+            else:
+                proj = torch.outer(W @ r_hat, r_hat)
             W.sub_(proj)
 
             if method == "biprojected":
