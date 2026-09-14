@@ -67,10 +67,11 @@ expects the DAPT and SFT adapters to be merged first:
 google/gemma-4-26B-A4B-it
   └─ merge: cmndcntrlcyber/gemma4-26b-a4b-dapt-offsec              (DAPT)
       └─ merge: cmndcntrlcyber/gemma4-26b-a4b-code-trainer-aggressive-full1  (SFT)
-          └─ LoRA: cmndcntrlcyber/gemma4-26b-a4b-code-trainer-v11-farca  (this adapter)
+          └─ merge: cmndcntrlcyber/gemma4-26b-a4b-code-trainer-vision-sft  (Vision SFT)
+              └─ LoRA: cmndcntrlcyber/gemma4-26b-a4b-code-trainer-v11-farca  (this adapter)
 ```
 
-For deployment, all three are merged into the base and quantized to GGUF
+For deployment, all four are merged into the base and quantized to GGUF
 (see [`gemma26b-offsec-coder-gguf`](https://huggingface.co/cmndcntrlcyber/gemma26b-offsec-coder-gguf)).
 
 ## Training data
@@ -87,7 +88,7 @@ FARCA blends two reward signals:
 
 | Component | Weight | Source |
 |---|---|---|
-| Rule-based tool-call formatting | 0.6 | Same 5-component reward as Qwen V10 GRPO |
+| Rule-based tool-call formatting | 0.6 | 6-component reward (V4.0: includes persona_aligned_reasoning at 10% weight) |
 | NLI factuality scoring | 0.4 | HHEM (`vectara/hallucination_evaluation_model`) |
 
 ### FARCA parameters

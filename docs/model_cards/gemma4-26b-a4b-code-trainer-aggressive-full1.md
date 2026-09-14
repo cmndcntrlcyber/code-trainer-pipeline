@@ -59,6 +59,10 @@ Qwen pipeline for MoE routing stability.
 * **Dataset:** [`cmndcntrlcyber/code-trainer-v9-mixed`](https://huggingface.co/datasets/cmndcntrlcyber/code-trainer-v9-mixed)
   (same dataset as the Qwen V9 SFT stage)
 * **Format:** Unified ChatML, tool calls formatted via `apply_chat_template(tools=...)`
+* **V4.0 persona injection:** the V10 mixed dataset injects the unified Nexus
+  system prompt across all ~47K examples via `--inject-system-prompt`, plus
+  ~400 identity training examples (Slice E) teaching the model to respond as
+  Nexus when asked about its identity, capabilities, and methodology.
 * **DAPT foundation:** the DAPT adapter
   ([`gemma4-26b-a4b-dapt-offsec`](https://huggingface.co/cmndcntrlcyber/gemma4-26b-a4b-dapt-offsec))
   is merged into the base model before SFT, grounding the model in offensive
@@ -99,6 +103,7 @@ Qwen pipeline for MoE routing stability.
 google/gemma-4-26B-A4B-it
   └─ merge: cmndcntrlcyber/gemma4-26b-a4b-dapt-offsec         (DAPT)
       └─ LoRA: cmndcntrlcyber/gemma4-26b-a4b-code-trainer-aggressive-full1  (this adapter)
+          └─ downstream: Vision SFT → FARCA-GRPO → DPO → GGUF
 ```
 
 ## Deployment notes

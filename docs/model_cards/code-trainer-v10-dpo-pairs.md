@@ -76,6 +76,16 @@ strategies**:
 
 Built by `src/phase4c_rl/data/collect_negatives.py --synthetic`.
 
+### Persona pairs (V4.0)
+
+~400 additional pairs targeting persona alignment:
+* **Chosen:** identity-aligned responses from Nexus identity training
+  examples (identifies as Nexus, offsec framing, MITRE ATT&CK, scope-first)
+* **Rejected:** vanilla AI assistant responses ("I'm a large language model
+  trained by Google", "helpful, harmless, honest", blanket refusals)
+
+Built by `src/phase4c_rl/data/build_dpo_pairs.py --identity-examples data/identity_examples/nexus_identity.jsonl`.
+
 ## Build pipeline
 
 ```bash

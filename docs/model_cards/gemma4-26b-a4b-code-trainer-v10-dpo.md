@@ -47,14 +47,15 @@ model copy in memory.
 
 ## Adapter chain
 
-The V10 DPO adapter sits at the end of a 4-stage chain:
+The V10 DPO adapter sits at the end of a 5-stage chain:
 
 ```
 google/gemma-4-26B-A4B-it
   └─ merge: cmndcntrlcyber/gemma4-26b-a4b-dapt-offsec              (DAPT)
       └─ merge: cmndcntrlcyber/gemma4-26b-a4b-code-trainer-aggressive-full1  (SFT)
-          └─ merge: cmndcntrlcyber/gemma4-26b-a4b-code-trainer-v11-farca  (FARCA-GRPO)
-              └─ LoRA: cmndcntrlcyber/gemma4-26b-a4b-code-trainer-v10-dpo  (this adapter)
+          └─ merge: cmndcntrlcyber/gemma4-26b-a4b-code-trainer-vision-sft  (Vision SFT)
+              └─ merge: cmndcntrlcyber/gemma4-26b-a4b-code-trainer-v11-farca  (FARCA-GRPO)
+                  └─ LoRA: cmndcntrlcyber/gemma4-26b-a4b-code-trainer-v10-dpo  (this adapter)
 ```
 
 For deployment, all four are merged into the base and quantized to GGUF
@@ -69,6 +70,10 @@ For deployment, all four are merged into the base and quantized to GGUF
   bug bounty — real offensive security agent traces with tool calls)
 * **Negatives:** synthetically generated via 4 degradation strategies
   (refusal, stripped tool calls, truncated, hallucinated commands)
+* **Persona pairs (V4.0):** ~400 additional pairs where the chosen response
+  identifies as Nexus (offsec framing, MITRE ATT&CK) and the rejected
+  response is a vanilla AI assistant reply. Built from identity training
+  examples via `build_dpo_pairs.py --identity-examples`.
 
 ## Training procedure
 

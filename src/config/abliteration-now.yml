@@ -1,0 +1,55 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  Standalone Abliteration Run — $8.00 on Existing Model          ║
+# ║                                                                  ║
+# ║  Uses the current adapter chain (DAPT → SFT → FARCA → DPO)     ║
+# ║  without the vision SFT adapter (not yet trained).               ║
+# ║                                                                  ║
+# ║  Produces: gemma26b-offsec-coder-abliterated-gguf on Hub        ║
+# ║  Cost: ~$8.00 (2.5h est @ $3.20/hr A100-large)                 ║
+# ║                                                                  ║
+# ║  Usage:                                                          ║
+# ║    set -a && source .env && set +a                               ║
+# ║    python -m src.phase5b_abliteration.scripts.launch_abliteration║
+# ║        --config src/config/abliteration-now.yml --wait           ║
+# ╚══════════════════════════════════════════════════════════════════╝
+
+abliteration:
+  base_model: "google/gemma-4-26B-A4B-it"
+  source_adapter: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v10-dpo
+  adapter_chain:
+    - ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
+    - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-aggressive-full1
+    - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-v11-farca
+  output_base: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer
+  abliterated_gguf_repo: ${HF_USERNAME}/gemma26b-offsec-coder-abliterated-gguf
+
+  techniques:
+    - name: nousresearch
+      method: biprojected
+      n_samples: 512
+      quantization: null
+    - name: obliteratus
+      preset: advanced
+      n_directions: 4
+      norm_preserve: true
+
+  evaluation:
+    harmful_dataset: "Undi95/orthogonal-activation-steering-TOXIC"
+    harmless_dataset: "tatsu-lab/alpaca"
+    n_eval_samples: 200
+    benchmark_tasks:
+      - gsm8k
+      - mmlu
+    num_fewshot: 0
+    batch_size: 8
+
+  cloud:
+    hardware: "a100-large"
+    timeout_seconds: 13500
+    wait_timeout_seconds: 18000
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+    quants:
+      - "Q4_K_M"
