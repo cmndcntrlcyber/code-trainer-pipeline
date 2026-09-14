@@ -210,21 +210,24 @@ def _get_decoder_layers(model):
 
     Supports:
       - model.model.layers (LlamaForCausalLM, Qwen2ForCausalLM, Gemma2ForCausalLM)
-      - model.language_model.model.layers (Gemma4ForConditionalGeneration)
+      - model.model.language_model.layers (Gemma4ForConditionalGeneration)
     """
     # Standard decoder-only: model.model.layers
     if hasattr(model, "model") and hasattr(model.model, "layers"):
         return model.model.layers
 
-    # Gemma 4 conditional generation: model.language_model.model.layers
-    if hasattr(model, "language_model"):
-        lm = model.language_model
-        if hasattr(lm, "model") and hasattr(lm.model, "layers"):
-            return lm.model.layers
+    # Gemma4ForConditionalGeneration:
+    #   model.model = Gemma4Model (has .language_model = Gemma4TextModel)
+    #   model.model.language_model.layers = nn.ModuleList[Gemma4TextDecoderLayer]
+    if hasattr(model, "model") and hasattr(model.model, "language_model"):
+        lm = model.model.language_model
+        if hasattr(lm, "layers"):
+            return lm.layers
 
     raise RuntimeError(
         f"Unsupported architecture: {type(model).__name__} — could not find "
-        f"transformer layers at model.model.layers or model.language_model.model.layers"
+        f"transformer layers. Checked: model.model.layers, "
+        f"model.model.language_model.layers"
     )
 
 
