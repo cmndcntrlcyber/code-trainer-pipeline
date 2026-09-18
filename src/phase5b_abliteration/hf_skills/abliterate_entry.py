@@ -67,7 +67,7 @@ def _install_dependencies():
         "uv", "pip", "install", "-q",
         "--index-strategy", "unsafe-best-match",
         "--no-deps",
-        "obliteratus", "abliterix", "lm-eval",
+        "abliterix", "lm-eval",
     ])
 
 
