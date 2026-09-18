@@ -398,9 +398,7 @@ gemma_deployment:
   adapter_chain:
     - ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
     - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-aggressive-full1
-    - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-vision-sft
   base_model: "google/gemma-4-26B-A4B-it"
-  enable_vision: true              # use Gemma4ForConditionalGeneration for merge
   cloud:
     hardware: "a100-large"
     timeout_seconds: 4050          # 67.5min — 150% of 45min estimate
@@ -424,8 +422,6 @@ abliteration:
   adapter_chain:
     - ${HF_USERNAME}/gemma4-26b-a4b-dapt-offsec
     - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-aggressive-full1
-    - ${HF_USERNAME}/gemma4-26b-a4b-code-trainer-vision-sft
-  enable_vision: true
   output_base: ${HF_USERNAME}/gemma4-26b-a4b-code-trainer
   abliterated_gguf_repo: ${HF_USERNAME}/gemma26b-offsec-coder-abliterated-gguf
 
