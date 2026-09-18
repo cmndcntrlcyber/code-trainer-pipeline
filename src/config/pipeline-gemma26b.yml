@@ -434,10 +434,7 @@ abliteration:
       method: biprojected
       n_samples: 512
       quantization: null
-    - name: obliteratus            # second technique for comparison
-      preset: advanced
-      n_directions: 4
-      norm_preserve: true
+    # obliteratus removed — package API broken (AbliterationPipeline not exported)
 
   evaluation:
     harmful_dataset: "Undi95/orthogonal-activation-steering-TOXIC"

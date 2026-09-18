@@ -250,20 +250,15 @@ def _apply_ablation(
 
         attn_proj = getattr(layer.self_attn, "o_proj", None)
         mlp_proj = getattr(layer.mlp, "down_proj", None)
-        if attn_proj is None or mlp_proj is None:
-            raise RuntimeError(
-                f"Layer {layer_idx}: expected self_attn.o_proj and mlp.down_proj "
-                f"but found attn attrs={[a for a in dir(layer.self_attn) if 'proj' in a]}, "
-                f"mlp attrs={[a for a in dir(layer.mlp) if 'proj' in a]}"
-            )
+        if attn_proj is None:
+            logger.warning("Layer %d: no self_attn.o_proj, skipping", layer_idx)
+            continue
 
-        for proj_name in ["o_proj", "down_proj"]:
-            if proj_name == "o_proj":
-                module = attn_proj
-            elif proj_name == "down_proj":
-                module = mlp_proj
-            else:
-                continue
+        targets = [("o_proj", attn_proj)]
+        if mlp_proj is not None:
+            targets.append(("down_proj", mlp_proj))
+
+        for proj_name, module in targets:
 
             W = module.weight.data  # (out_features, in_features)
             orig_norm = W.norm().item()

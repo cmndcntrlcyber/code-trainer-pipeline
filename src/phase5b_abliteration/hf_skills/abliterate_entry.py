@@ -50,22 +50,24 @@ def _run(cmd, cwd=None):
 def _install_dependencies():
     """Install abliteration technique packages (cloud-only).
 
-    All packages installed with --no-deps to prevent pulling in a kernels
+    Order matters: lm-eval's import chain requires sacrebleu at import time,
+    so its runtime deps must be installed BEFORE lm-eval itself.
+    Technique packages use --no-deps to prevent pulling in a kernels
     version that breaks transformers 5.7.0 (LayerRepository init error).
-    The venv already has transformers, torch, peft, datasets from uv sync.
     """
     logger.info("Installing abliteration dependencies...")
+    # 1. lm-eval runtime deps FIRST (sacrebleu needed at lm_eval import)
+    _run([
+        "uv", "pip", "install", "-q",
+        "--index-strategy", "unsafe-best-match",
+        "sacrebleu", "rouge-score", "immutabledict",
+    ])
+    # 2. Technique packages + lm-eval (--no-deps to avoid kernel conflicts)
     _run([
         "uv", "pip", "install", "-q",
         "--index-strategy", "unsafe-best-match",
         "--no-deps",
         "obliteratus", "abliterix", "lm-eval",
-    ])
-    # lm-eval runtime deps not pulled by --no-deps
-    _run([
-        "uv", "pip", "install", "-q",
-        "--index-strategy", "unsafe-best-match",
-        "sacrebleu", "rouge-score", "immutabledict",
     ])
 
 
