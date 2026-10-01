@@ -1,0 +1,516 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  NEXUS SWARM v4a MAX — Maximum Quality Multi-Model Pipeline    ║
+# ║  Layout A (without P40): 4 models, 5 nodes, ~$110 budget      ║
+# ║                                                                 ║
+# ║  Based on: pipeline-swarm-v4a.yml (baseline)                   ║
+# ║  Upgrades: Qwen3-14B orchestrator, DAPT for all models,       ║
+# ║            2-epoch SFT, full FARCA-GRPO + DPO all roles,       ║
+# ║            NousResearch abliteration on orchestrator            ║
+# ║                                                                 ║
+# ║  Allocated:    $90.56 (~28.5h) across 4 role tracks            ║
+# ║  Contingency:  $20.00 ( 6.25h) retry / Qwen2.5 fallback       ║
+# ║  Total:        $110.20                                          ║
+# ╚══════════════════════════════════════════════════════════════════╝
+#
+# USAGE:
+#   cd /mnt/ssd/training && set -a && source .env && set +a
+#   python -m src.scripts.launch_swarm_pipeline \
+#       --config src/config/pipeline-swarm-v4a-max.yml --role all --wait
+
+# ─── Swarm Fleet Topology (informational) ───────────────────────
+swarm_meta:
+  layout: "v4a-max"
+  description: "5-node swarm, max quality. Qwen3-14B orchestrator on K1."
+  nodes:
+    - hostname: nexus-k1
+      ip: 192.168.8.238
+      gpu: "RTX 5060 Ti (16 GB)"
+      host: "ACEMAGIC K1 (Ryzen 7 7730U, 32 GB DDR4)"
+      role: orchestrator
+      port: 8080
+    - hostname: nexus-control
+      ip: 192.168.8.248
+      gpu: "RTX 3070 Laptop (8 GB)"
+      host: "daedelu5"
+      role: control_plane+worker
+      ports: [4000, 8084, 9100, 50051, 50052]
+    - hostname: nexus-3060
+      ip: 192.168.8.161
+      gpu: "RTX 3060 Laptop (6 GB)"
+      role: explore
+      port: 8086
+    - hostname: nexus-opi5p
+      ip: 192.168.8.224
+      gpu: "RK3588 NPU (6 TOPS)"
+      role: triage
+      port: 8088
+    - hostname: nexus-opi5b
+      ip: 192.168.8.221
+      gpu: "RK3588S CPU (ARM)"
+      role: embeddings
+      port: 8087
+
+# ─── Shared Data Paths ──────────────────────────────────────────
+data_collection:
+  github_token: ${GITHUB_TOKEN}
+  repos_dir: ./data/sample-data/repositories
+  captures_dir: ./data/sample-data/captures
+  catalog_db: ./data/catalog.db
+
+preprocessing:
+  dataset_name: cmndcntrlcyber/code-trainer-offsec-dataset
+
+# ═══════════════════════════════════════════════════════════════════
+# ORCHESTRATOR — Qwen3-14B on K1's RTX 5060 Ti (16 GB)
+# Budget: $52.80 (16.5h)
+# Phase chain: DAPT → SFT → validation → FARCA-GRPO → DPO →
+#              validation → GGUF → abliteration
+#
+# MODEL: Qwen/Qwen3-14B (dense, 14B params)
+#   - Improved reasoning over Qwen2.5 line
+#   - Native thinking mode aligns with TTCA Assess→Select→Act
+#   - Same VRAM footprint as Qwen2.5-Coder-14B (~8.5 GB at Q4_K_M)
+#   - Requires fresh DAPT (Qwen2.5 adapter does not transfer)
+#
+# FALLBACK: If Qwen3-14B fails the SFT validation gate, retrain
+#   with Qwen/Qwen2.5-Coder-14B-Instruct using the existing DAPT
+#   adapter (${HF_USERNAME}/qwen14b-dapt-offsec). Covered by the
+#   $20 contingency budget.
+# ═══════════════════════════════════════════════════════════════════
+orchestrator:
+  role: "orchestrator"
+  base_model: "Qwen/Qwen3-14B"
+
+  dapt:
+    base_model: "Qwen/Qwen3-14B"
+    corpus_dirs:
+      - data/offensive-security/repositories
+    max_seq_length: 2048
+    lora_r: 32
+    lora_alpha: 64
+    lora_dropout: 0.05
+    learning_rate: 5e-5
+    num_epochs: 1
+    min_lines: 10
+    max_lines: 1000
+    max_documents: 10000
+    output_adapter: ${HF_USERNAME}/qwen3-14b-dapt-offsec
+    cloud:
+      hardware: "a100-large"
+      wandb_project: "rtpi-swarm-v4a-max-orchestrator-dapt"
+      timeout_seconds: 10800
+      poll_interval: 60
+      image: "huggingface/transformers-pytorch-gpu:latest"
+      repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+      repo_ref: "main"
+
+  sft:
+    dapt_adapter: ${HF_USERNAME}/qwen3-14b-dapt-offsec
+    dataset_id: ${HF_USERNAME}/code-trainer-v11-orchestrator
+    dataset_revision: "main"
+    train_limit: 15000
+    num_epochs: 2
+    max_seq_length: 4096
+    lora_r: 32
+    lora_alpha: 64
+    lora_dropout: 0.05
+    learning_rate: 1e-4
+    batch_size: 1
+    gradient_accumulation: 16
+    output_adapter: ${HF_USERNAME}/qwen3-14b-orchestrator-sft
+
+  validation:
+    tool_call_pass_rate: 0.75
+    tool_call_scenarios: 14
+    gsm8k_threshold: 0.55
+    agent_progress_threshold: 3
+    agent_scenarios: 7
+
+  rl:
+    farca_grpo:
+      base_adapter: ${HF_USERNAME}/qwen3-14b-orchestrator-sft
+      dapt_adapter: ${HF_USERNAME}/qwen3-14b-dapt-offsec
+      base_model: "Qwen/Qwen3-14B"
+      prompt_dataset: ${HF_USERNAME}/code-trainer-v11-grpo-orchestrator
+      num_generations: 4
+      learning_rate: 5e-7
+      kl_coef: 0.1
+      max_new_tokens: 768
+      max_prompts: 500
+      output_adapter: ${HF_USERNAME}/qwen3-14b-orchestrator-farca
+      role: "orchestrator"
+      claim_extraction_backend: "rule_based"
+      nli_model_id: "vectara/hallucination_evaluation_model"
+      sentence_encoder_id: "all-MiniLM-L6-v2"
+      k_rel: 1
+      mu: 0.16
+      tau: 0.20
+      nli_weight: 0.4
+      rule_weight: 0.6
+      warmup_steps: 0
+      coherence_enabled: true
+      coherence_weight: 0.3
+
+    dpo:
+      base_adapter: ${HF_USERNAME}/qwen3-14b-orchestrator-farca
+      base_model: "Qwen/Qwen3-14B"
+      preference_dataset: ${HF_USERNAME}/code-trainer-v11-dpo-orchestrator
+      beta: 0.1
+      learning_rate: 1e-6
+      max_length: 4096
+      max_pairs: 1500
+      output_adapter: ${HF_USERNAME}/qwen3-14b-orchestrator-dpo
+      include_persona_pairs: true
+      persona_pairs_path: data/identity_examples/nexus_identity.jsonl
+
+    rl_validation:
+      tool_call_pass_rate: 0.80
+      tool_call_scenarios: 14
+      agent_progress_threshold: 5
+      agent_scenarios: 7
+
+  deployment:
+    quantization: "Q4_K_M"
+    context_length: 12288
+    port: 8080
+    gguf_repo: ${HF_USERNAME}/qwen3-14b-orchestrator-gguf
+    source_adapter: ${HF_USERNAME}/qwen3-14b-orchestrator-dpo
+    adapter_chain:
+      - ${HF_USERNAME}/qwen3-14b-dapt-offsec
+      - ${HF_USERNAME}/qwen3-14b-orchestrator-sft
+    base_model: "Qwen/Qwen3-14B"
+
+  abliteration:
+    base_model: "Qwen/Qwen3-14B"
+    source_adapter: ${HF_USERNAME}/qwen3-14b-orchestrator-dpo
+    adapter_chain:
+      - ${HF_USERNAME}/qwen3-14b-dapt-offsec
+      - ${HF_USERNAME}/qwen3-14b-orchestrator-sft
+    output_base: ${HF_USERNAME}/qwen3-14b-orchestrator
+    abliterated_gguf_repo: ${HF_USERNAME}/qwen3-14b-orchestrator-abliterated-gguf
+    techniques:
+      - name: nousresearch
+        method: biprojected
+        n_samples: 512
+        quantization: null
+    evaluation:
+      harmful_dataset: "Undi95/orthogonal-activation-steering-TOXIC"
+      harmless_dataset: "tatsu-lab/alpaca"
+      n_eval_samples: 200
+      benchmark_tasks:
+        - gsm8k
+        - mmlu
+      num_fewshot: 0
+      batch_size: 16
+    cloud:
+      hardware: "a100-large"
+      timeout_seconds: 9000
+      wait_timeout_seconds: 14400
+      poll_interval: 60
+      image: "huggingface/transformers-pytorch-gpu:latest"
+      repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+      repo_ref: "main"
+      quants:
+        - "Q4_K_M"
+
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-swarm-v4a-max-orchestrator"
+    timeout_seconds: 43200
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+    quants:
+      - "Q4_K_M"
+
+# ═══════════════════════════════════════════════════════════════════
+# WORKER — Qwen3-8B on daedelu5's RTX 3070 (8 GB)
+# Budget: $22.88 (7.15h)
+# Phase chain: DAPT → SFT → validation → FARCA-GRPO → DPO →
+#              validation → GGUF
+# ═══════════════════════════════════════════════════════════════════
+worker:
+  role: "worker"
+  base_model: "Qwen/Qwen3-8B"
+
+  dapt:
+    base_model: "Qwen/Qwen3-8B"
+    corpus_dirs:
+      - data/offensive-security/repositories
+    max_seq_length: 2048
+    lora_r: 32
+    lora_alpha: 64
+    lora_dropout: 0.05
+    learning_rate: 5e-5
+    num_epochs: 1
+    min_lines: 10
+    max_lines: 1000
+    max_documents: 10000
+    output_adapter: ${HF_USERNAME}/qwen3-8b-dapt-offsec
+    cloud:
+      hardware: "a100-large"
+      wandb_project: "rtpi-swarm-v4a-max-worker-dapt"
+      timeout_seconds: 7200
+      poll_interval: 60
+      image: "huggingface/transformers-pytorch-gpu:latest"
+      repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+      repo_ref: "main"
+
+  sft:
+    dapt_adapter: ${HF_USERNAME}/qwen3-8b-dapt-offsec
+    dataset_id: ${HF_USERNAME}/code-trainer-v11-worker
+    dataset_revision: "main"
+    train_limit: 12000
+    num_epochs: 2
+    max_seq_length: 4096
+    lora_r: 32
+    lora_alpha: 64
+    lora_dropout: 0.05
+    learning_rate: 1e-4
+    batch_size: 1
+    gradient_accumulation: 16
+    output_adapter: ${HF_USERNAME}/qwen3-8b-worker-sft
+    enable_thinking: false
+
+  validation:
+    tool_call_pass_rate: 0.80
+    tool_call_scenarios: 14
+
+  rl:
+    farca_grpo:
+      base_adapter: ${HF_USERNAME}/qwen3-8b-worker-sft
+      dapt_adapter: ${HF_USERNAME}/qwen3-8b-dapt-offsec
+      base_model: "Qwen/Qwen3-8B"
+      prompt_dataset: ${HF_USERNAME}/code-trainer-v11-grpo-worker
+      num_generations: 4
+      learning_rate: 5e-7
+      kl_coef: 0.1
+      max_new_tokens: 768
+      max_prompts: 400
+      output_adapter: ${HF_USERNAME}/qwen3-8b-worker-farca
+      role: "worker"
+      claim_extraction_backend: "rule_based"
+      nli_model_id: "vectara/hallucination_evaluation_model"
+      sentence_encoder_id: "all-MiniLM-L6-v2"
+      k_rel: 1
+      mu: 0.16
+      tau: 0.20
+      nli_weight: 0.4
+      rule_weight: 0.6
+      warmup_steps: 0
+
+    dpo:
+      base_adapter: ${HF_USERNAME}/qwen3-8b-worker-farca
+      base_model: "Qwen/Qwen3-8B"
+      preference_dataset: ${HF_USERNAME}/code-trainer-v11-dpo-worker
+      beta: 0.1
+      learning_rate: 1e-6
+      max_length: 4096
+      max_pairs: 800
+      output_adapter: ${HF_USERNAME}/qwen3-8b-worker-dpo
+
+    rl_validation:
+      tool_call_pass_rate: 0.85
+      tool_call_scenarios: 14
+
+  deployment:
+    quantization: "Q4_K_M"
+    context_length: 4096
+    port: 8084
+    gguf_repo: ${HF_USERNAME}/qwen3-8b-worker-gguf
+    source_adapter: ${HF_USERNAME}/qwen3-8b-worker-dpo
+    adapter_chain:
+      - ${HF_USERNAME}/qwen3-8b-dapt-offsec
+      - ${HF_USERNAME}/qwen3-8b-worker-sft
+    base_model: "Qwen/Qwen3-8B"
+
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-swarm-v4a-max-worker"
+    timeout_seconds: 32400
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+    quants:
+      - "Q4_K_M"
+
+# ═══════════════════════════════════════════════════════════════════
+# EXPLORE — google/gemma-4-4b-it on RTX 3060 (6 GB)
+# Budget: $10.88 (3.4h)
+# Phase chain: DAPT → SFT → validation → GRPO → DPO →
+#              validation → GGUF
+# ═══════════════════════════════════════════════════════════════════
+explore:
+  role: "explore"
+  base_model: "google/gemma-4-4b-it"
+
+  dapt:
+    base_model: "google/gemma-4-4b-it"
+    corpus_dirs:
+      - data/offensive-security/repositories
+    max_seq_length: 2048
+    lora_r: 32
+    lora_alpha: 64
+    lora_dropout: 0.05
+    learning_rate: 2.5e-5
+    num_epochs: 1
+    min_lines: 10
+    max_lines: 1000
+    max_documents: 5000
+    output_adapter: ${HF_USERNAME}/gemma4-4b-dapt-classify
+    cloud:
+      hardware: "a100-large"
+      wandb_project: "rtpi-swarm-v4a-max-explore-dapt"
+      timeout_seconds: 5400
+      poll_interval: 60
+      image: "huggingface/transformers-pytorch-gpu:latest"
+      repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+      repo_ref: "main"
+
+  sft:
+    dapt_adapter: ${HF_USERNAME}/gemma4-4b-dapt-classify
+    dataset_id: ${HF_USERNAME}/code-trainer-v11-explore
+    dataset_revision: "main"
+    train_limit: 8000
+    num_epochs: 2
+    max_seq_length: 4096
+    lora_r: 32
+    lora_alpha: 64
+    lora_dropout: 0.05
+    learning_rate: 5e-5
+    batch_size: 1
+    gradient_accumulation: 16
+    output_adapter: ${HF_USERNAME}/gemma4-4b-explore-sft
+
+  validation:
+    classification_accuracy: 0.80
+    zero_write_tool_violations: true
+
+  rl:
+    grpo:
+      base_adapter: ${HF_USERNAME}/gemma4-4b-explore-sft
+      dapt_adapter: ${HF_USERNAME}/gemma4-4b-dapt-classify
+      base_model: "google/gemma-4-4b-it"
+      prompt_dataset: ${HF_USERNAME}/code-trainer-v11-grpo-explore
+      num_generations: 4
+      learning_rate: 2.5e-7
+      kl_coef: 0.1
+      max_new_tokens: 512
+      max_prompts: 200
+      output_adapter: ${HF_USERNAME}/gemma4-4b-explore-grpo
+      role: "explore"
+
+    dpo:
+      base_adapter: ${HF_USERNAME}/gemma4-4b-explore-grpo
+      base_model: "google/gemma-4-4b-it"
+      preference_dataset: ${HF_USERNAME}/code-trainer-v11-dpo-explore
+      beta: 0.1
+      learning_rate: 5e-7
+      max_length: 4096
+      max_pairs: 300
+      output_adapter: ${HF_USERNAME}/gemma4-4b-explore-dpo
+
+    rl_validation:
+      classification_accuracy: 0.85
+      zero_write_tool_violations: true
+
+  deployment:
+    quantization: "Q8_0"
+    context_length: 4096
+    port: 8086
+    gguf_repo: ${HF_USERNAME}/gemma4-4b-explore-gguf
+    source_adapter: ${HF_USERNAME}/gemma4-4b-explore-dpo
+    adapter_chain:
+      - ${HF_USERNAME}/gemma4-4b-dapt-classify
+      - ${HF_USERNAME}/gemma4-4b-explore-sft
+    base_model: "google/gemma-4-4b-it"
+
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-swarm-v4a-max-explore"
+    timeout_seconds: 16200
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+    quants:
+      - "Q8_0"
+
+# ═══════════════════════════════════════════════════════════════════
+# TRIAGE — Qwen3.5-0.8B on RK3588 NPU
+# Budget: $4.64 (1.45h)
+# Phase chain: SFT → validation → GRPO → validation → RKLLM
+# ═══════════════════════════════════════════════════════════════════
+triage:
+  role: "triage"
+  base_model: "Qwen/Qwen3.5-0.8B"
+
+  sft:
+    dataset_id: ${HF_USERNAME}/code-trainer-v11-triage
+    dataset_revision: "main"
+    train_limit: 5000
+    num_epochs: 3
+    max_seq_length: 512
+    lora_r: 16
+    lora_alpha: 32
+    lora_dropout: 0.05
+    learning_rate: 2e-4
+    batch_size: 4
+    gradient_accumulation: 4
+    output_adapter: ${HF_USERNAME}/qwen35-08b-triage-sft
+
+  validation:
+    routing_accuracy: 0.85
+
+  rl:
+    grpo:
+      base_adapter: ${HF_USERNAME}/qwen35-08b-triage-sft
+      base_model: "Qwen/Qwen3.5-0.8B"
+      prompt_dataset: ${HF_USERNAME}/code-trainer-v11-grpo-triage
+      num_generations: 4
+      learning_rate: 1e-6
+      kl_coef: 0.1
+      max_new_tokens: 64
+      max_prompts: 200
+      output_adapter: ${HF_USERNAME}/qwen35-08b-triage-grpo
+      role: "triage"
+
+    rl_validation:
+      routing_accuracy: 0.90
+
+  deployment:
+    format: "rkllm"
+    target: "w8a8"
+    target_platform: "rk3588"
+    port: 8088
+    rkllm_repo: ${HF_USERNAME}/qwen35-08b-triage-rkllm
+
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-swarm-v4a-max-triage"
+    timeout_seconds: 7200
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+
+# ─── CONTINGENCY PLAN ───────────────────────────────────────────
+#
+# $20.00 (6.25h) reserved for retries and fallback. Priority order:
+#
+#   1. QWEN3-14B FALLBACK: If orchestrator SFT validation fails,
+#      switch to Qwen/Qwen2.5-Coder-14B-Instruct with existing
+#      DAPT adapter (${HF_USERNAME}/qwen14b-dapt-offsec).
+#      Retrain SFT + RL using baseline pipeline-swarm-v4a.yml.
+#      Cost: ~$29 (fits in contingency if explore/triage passed).
+#
+#   2. Orchestrator SFT retry: --train-limit 10000 (saves ~3h)
+#   3. Worker FARCA retry: max_prompts=200 (saves ~0.75h)
+#   4. Skip explore RL — SFT-only with system prompt may suffice
+#   5. Skip triage GRPO — SFT alone at 3 epochs is likely sufficient
+#
+# RKLLM FALLBACK: If rkllm-toolkit doesn't support Qwen3.5-0.8B:
+#   - Use llama.cpp ARM build with Q8_0 GGUF on CPU
+#   - Slower but universally compatible
