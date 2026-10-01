@@ -51,4 +51,10 @@ def load_config(config_path: str, substitute_env: bool = True) -> Dict:
     if substitute_env:
         config = _substitute_env_vars(config)
 
+    # Resolve pipeline.domain or top-level domain, defaulting to "offsec".
+    if "domain" not in config:
+        pipeline = config.get("pipeline", {})
+        if isinstance(pipeline, dict) and "domain" in pipeline:
+            config["domain"] = pipeline["domain"]
+
     return config

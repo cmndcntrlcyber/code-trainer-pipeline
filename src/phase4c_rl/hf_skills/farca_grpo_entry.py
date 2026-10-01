@@ -107,7 +107,14 @@ def main():
     ds = load_dataset(prompt_dataset, split="train")
 
     farca_role_name = params.get("role")
-    if farca_role_name:
+    farca_domain_name = params.get("domain")
+    if farca_domain_name:
+        from src.config.domain_loader import get_domain
+        domain_cfg = get_domain(farca_domain_name)
+        system_prompt = domain_cfg.build_system_prompt(
+            NEXUS_TOOLS_V10, role=farca_role_name,
+        )
+    elif farca_role_name:
         from src.config.nexus_role_identities import build_role_system_prompt
         system_prompt = build_role_system_prompt(farca_role_name, NEXUS_TOOLS_V10)
     else:
@@ -184,12 +191,14 @@ def main():
 
     # ── 5. Reward wrapper (standard — FARCA reshapes advantages, not rewards)
     farca_role = params.get("role")  # None for single-model, "orchestrator"/"worker" for swarm
+    farca_domain = params.get("domain")  # None for legacy, "offsec" etc. for domain-aware
 
     def reward_fn(prompts, completions, **kwargs):
         return tool_call_reward(
             completions,
             prompts=prompts if farca_role else None,
             role=farca_role,
+            domain=farca_domain,
         )
 
     # ── 6. Training config ────────────────────────────────────────────

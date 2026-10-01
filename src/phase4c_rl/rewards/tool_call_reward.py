@@ -230,24 +230,33 @@ def _reasoning_efficiency(response: str) -> float:
     return 1.0 - 0.5 * (reasoning_len - 100) / 300
 
 
-def _persona_aligned_reasoning(response: str) -> float:
+def _persona_aligned_reasoning(
+    response: str,
+    domain_terms: frozenset[str] | None = None,
+    break_phrases: list[str] | None = None,
+) -> float:
     """Score persona alignment of the reasoning prefix.
 
-    1.0 if offsec terms present AND no persona-breaking phrases.
-    0.5 if no persona-breaking phrases but no offsec terms.
+    1.0 if domain terms present AND no persona-breaking phrases.
+    0.5 if no persona-breaking phrases but no domain terms.
     0.0 if persona-breaking phrases detected.
+
+    When *domain_terms* or *break_phrases* are None, falls back to
+    the module-level OFFSEC_TERMS / PERSONA_BREAK_PHRASES constants.
     """
+    terms = domain_terms if domain_terms is not None else OFFSEC_TERMS
+    phrases = break_phrases if break_phrases is not None else PERSONA_BREAK_PHRASES
+
     lower = response.lower()
 
-    for phrase in PERSONA_BREAK_PHRASES:
+    for phrase in phrases:
         if phrase in lower:
             return 0.0
 
-    # Check the reasoning prefix (text before first tool call) for offsec terms.
     idx = response.find("<tool_call>")
     prefix = response[:idx].lower() if idx >= 0 else lower
     words = set(re.findall(r"[a-z&]+", prefix))
-    if words & OFFSEC_TERMS:
+    if words & terms:
         return 1.0
     return 0.5
 
@@ -259,6 +268,7 @@ def tool_call_reward(
     prompts: list[str] | None = None,
     role: str | None = None,
     weights: dict[str, float] | None = None,
+    domain: str | None = None,
     **kwargs,
 ) -> list[float]:
     """Score a batch of model completions for tool-call quality.
@@ -272,6 +282,9 @@ def tool_call_reward(
         role: Optional swarm role name. When set, loads role-specific weights
               from role_reward_weights. When None, uses default WEIGHTS.
         weights: Explicit weight dict override (for testing/custom configs).
+        domain: Optional domain name (e.g. "offsec"). Loads domain-specific
+                terms and break phrases for persona scoring. When None, uses
+                the module-level OFFSEC_TERMS / PERSONA_BREAK_PHRASES.
         **kwargs: Ignored (allows GRPOTrainer to pass extra context).
 
     Returns:
@@ -286,6 +299,15 @@ def tool_call_reward(
     else:
         active_weights = WEIGHTS
 
+    # Resolve domain-specific vocabulary for persona scoring.
+    _domain_terms: frozenset[str] | None = None
+    _break_phrases: list[str] | None = None
+    if domain is not None:
+        from src.config.domain_loader import get_domain
+        d = get_domain(domain)
+        _domain_terms = d.domain_terms
+        _break_phrases = d.break_phrases
+
     # Allow runtime schema override.
     global VALID_TOOL_NAMES
     original_valid = VALID_TOOL_NAMES
@@ -299,7 +321,9 @@ def tool_call_reward(
         "has_reasoning_prefix": lambda r, p: _has_reasoning_prefix(r),
         "no_hallucinated_tools": lambda r, p: _no_hallucinated_tools(r),
         "ends_cleanly_after_tag": lambda r, p: _ends_cleanly_after_tag(r),
-        "persona_aligned_reasoning": lambda r, p: _persona_aligned_reasoning(r),
+        "persona_aligned_reasoning": lambda r, p: _persona_aligned_reasoning(
+            r, domain_terms=_domain_terms, break_phrases=_break_phrases,
+        ),
         "tool_selection_quality": lambda r, p: _tool_selection_quality(r, p),
         "reasoning_efficiency": lambda r, p: _reasoning_efficiency(r),
     }
@@ -329,6 +353,7 @@ def tool_call_reward_detailed(
     prompt: str | None = None,
     role: str | None = None,
     weights: dict[str, float] | None = None,
+    domain: str | None = None,
 ) -> dict:
     """Score a single response and return per-component breakdown.
 
@@ -342,6 +367,14 @@ def tool_call_reward_detailed(
     else:
         active_weights = WEIGHTS
 
+    _domain_terms: frozenset[str] | None = None
+    _break_phrases: list[str] | None = None
+    if domain is not None:
+        from src.config.domain_loader import get_domain
+        d = get_domain(domain)
+        _domain_terms = d.domain_terms
+        _break_phrases = d.break_phrases
+
     global VALID_TOOL_NAMES
     original_valid = VALID_TOOL_NAMES
     if schema is not None:
@@ -353,7 +386,9 @@ def tool_call_reward_detailed(
         "has_reasoning_prefix": lambda: _has_reasoning_prefix(response),
         "no_hallucinated_tools": lambda: _no_hallucinated_tools(response),
         "ends_cleanly_after_tag": lambda: _ends_cleanly_after_tag(response),
-        "persona_aligned_reasoning": lambda: _persona_aligned_reasoning(response),
+        "persona_aligned_reasoning": lambda: _persona_aligned_reasoning(
+            response, domain_terms=_domain_terms, break_phrases=_break_phrases,
+        ),
         "tool_selection_quality": lambda: _tool_selection_quality(response, prompt),
         "reasoning_efficiency": lambda: _reasoning_efficiency(response),
     }

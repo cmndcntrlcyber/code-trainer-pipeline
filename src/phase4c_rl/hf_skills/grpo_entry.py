@@ -106,7 +106,14 @@ def main():
     ds = load_dataset(prompt_dataset, split="train")
 
     grpo_role_name = params.get("role")
-    if grpo_role_name:
+    grpo_domain_name = params.get("domain")
+    if grpo_domain_name:
+        from src.config.domain_loader import get_domain
+        domain_cfg = get_domain(grpo_domain_name)
+        system_prompt = domain_cfg.build_system_prompt(
+            NEXUS_TOOLS_V10, role=grpo_role_name,
+        )
+    elif grpo_role_name:
         from src.config.nexus_role_identities import build_role_system_prompt
         system_prompt = build_role_system_prompt(grpo_role_name, NEXUS_TOOLS_V10)
     else:
@@ -182,6 +189,7 @@ def main():
 
     # ── 4. GRPO reward wrapper ────────────────────────────────────────────
     grpo_role = params.get("role")  # None for single-model, "orchestrator"/"worker" for swarm
+    grpo_domain = params.get("domain")  # None for legacy, "offsec" etc. for domain-aware
 
     def reward_fn(prompts, completions, **kwargs):
         """Wrap tool_call_reward for GRPOTrainer interface.
@@ -190,6 +198,7 @@ def main():
             completions,
             prompts=prompts if grpo_role else None,
             role=grpo_role,
+            domain=grpo_domain,
         )
 
     # ── 5. Training config ────────────────────────────────────────────────
