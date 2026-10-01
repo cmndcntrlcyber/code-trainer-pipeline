@@ -106,8 +106,13 @@ def main():
     logger.info("Loading prompt dataset: %s", prompt_dataset)
     ds = load_dataset(prompt_dataset, split="train")
 
-    from src.config.nexus_identity import build_nexus_system_prompt
-    system_prompt = build_nexus_system_prompt(NEXUS_TOOLS_V10)
+    farca_role_name = params.get("role")
+    if farca_role_name:
+        from src.config.nexus_role_identities import build_role_system_prompt
+        system_prompt = build_role_system_prompt(farca_role_name, NEXUS_TOOLS_V10)
+    else:
+        from src.config.nexus_identity import build_nexus_system_prompt
+        system_prompt = build_nexus_system_prompt(NEXUS_TOOLS_V10)
 
     def format_prompt(example):
         messages = [
@@ -178,8 +183,14 @@ def main():
     logger.info("FARCA pipeline initialized")
 
     # ── 5. Reward wrapper (standard — FARCA reshapes advantages, not rewards)
+    farca_role = params.get("role")  # None for single-model, "orchestrator"/"worker" for swarm
+
     def reward_fn(prompts, completions, **kwargs):
-        return tool_call_reward(completions)
+        return tool_call_reward(
+            completions,
+            prompts=prompts if farca_role else None,
+            role=farca_role,
+        )
 
     # ── 6. Training config ────────────────────────────────────────────
     if not os.environ.get("WANDB_API_KEY") and not os.environ.get("WANDB_MODE"):

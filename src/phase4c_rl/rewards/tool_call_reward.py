@@ -113,6 +113,123 @@ def _ends_cleanly_after_tag(response: str) -> float:
     return 1.0 if len(trailing) <= 5 else 0.0
 
 
+def _tool_selection_quality(response: str, prompt: str | None = None) -> float:
+    """TTCA P0: Score tool-task alignment (0.0–1.0).
+
+    Three sub-signals combined: scope-before-action (0.4),
+    tool-task alignment (0.4), no-redundancy (0.2).
+
+    Only called when a role-specific weight table includes this key.
+    """
+    calls = _parse_tool_calls(response)
+    if not calls:
+        return 0.0
+
+    # Sub-signal 1: scope before action
+    scope_score = _scope_before_action(response, prompt)
+
+    # Sub-signal 2: tool-task alignment
+    alignment_score = _tool_task_alignment(calls, prompt)
+
+    # Sub-signal 3: no redundant tool calls
+    redundancy_score = _no_redundancy(calls)
+
+    return 0.4 * scope_score + 0.4 * alignment_score + 0.2 * redundancy_score
+
+
+def _scope_before_action(response: str, prompt: str | None) -> float:
+    """1.0 if ScopeCheck precedes action tools when new targets are engaged."""
+    calls = _parse_tool_calls(response)
+    if not calls:
+        return 1.0
+
+    action_tools = {"Bash", "Skill", "WebFetch"}
+    scope_check_seen = False
+    for call in calls:
+        name = call.get("name", "")
+        if name == "ScopeCheck":
+            scope_check_seen = True
+        elif name in action_tools and not scope_check_seen:
+            if prompt and any(
+                kw in prompt.lower()
+                for kw in ("new target", "new ip", "new domain", "new host")
+            ):
+                return 0.0
+    return 1.0
+
+
+_TOOL_TASK_MAP = {
+    "read": "Read", "check file": "Read", "show file": "Read", "view": "Read",
+    "search": "Grep", "find": "Grep", "grep": "Grep", "look for": "Grep",
+    "list": "LS", "directory": "LS", "ls": "LS",
+    "edit": "Edit", "change": "Edit", "modify": "Edit", "replace": "Edit",
+    "write": "Write", "create file": "Write", "save": "Write",
+    "scan": "Bash", "run": "Bash", "execute": "Bash", "install": "Bash",
+    "fetch": "WebFetch", "download": "WebFetch", "url": "WebFetch",
+    "scope": "ScopeCheck", "authorized": "ScopeCheck",
+}
+
+
+def _tool_task_alignment(calls: list[dict], prompt: str | None) -> float:
+    """1.0 if tool matches task keywords, 0.5 for Bash fallback, 0.0 for mismatch."""
+    if not prompt or not calls:
+        return 0.5
+
+    lower = prompt.lower()
+    expected = None
+    for keyword, tool in _TOOL_TASK_MAP.items():
+        if keyword in lower:
+            expected = tool
+            break
+
+    if expected is None:
+        return 0.5
+
+    first_tool = calls[0].get("name", "")
+    if first_tool == expected:
+        return 1.0
+    if first_tool == "Bash":
+        return 0.5
+    return 0.0
+
+
+def _no_redundancy(calls: list[dict]) -> float:
+    """1.0 if no duplicate tool+target pairs detected."""
+    seen: set[str] = set()
+    for call in calls:
+        name = call.get("name", "")
+        args = call.get("arguments", {})
+        target = args.get("path") or args.get("command") or args.get("url") or ""
+        key = f"{name}:{target}"
+        if key in seen:
+            return 0.0
+        seen.add(key)
+    return 1.0
+
+
+def _reasoning_efficiency(response: str) -> float:
+    """TTCA P2: Soft conciseness bonus (0.5–1.0).
+
+    1.0 for <100 chars reasoning, linear decay to 0.5 at 400+ chars.
+    Gated on having a valid tool call — no credit without correctness.
+
+    Only called when a role-specific weight table includes this key.
+    """
+    if _has_valid_tool_call_tags(response) < 1.0:
+        return 0.0
+
+    idx = response.find("<tool_call>")
+    if idx < 0:
+        return 0.0
+
+    reasoning_len = len(response[:idx].strip())
+    if reasoning_len <= 100:
+        return 1.0
+    if reasoning_len >= 400:
+        return 0.5
+    return 1.0 - 0.5 * (reasoning_len - 100) / 300
+
+
 def _persona_aligned_reasoning(response: str) -> float:
     """Score persona alignment of the reasoning prefix.
 
@@ -139,6 +256,9 @@ def tool_call_reward(
     completions: list[str],
     schema: Optional[list[dict]] = None,
     persona_reward: bool = True,
+    prompts: list[str] | None = None,
+    role: str | None = None,
+    weights: dict[str, float] | None = None,
     **kwargs,
 ) -> list[float]:
     """Score a batch of model completions for tool-call quality.
@@ -148,39 +268,57 @@ def tool_call_reward(
         schema: Optional tool schema list. If provided, overrides
                 NEXUS_TOOLS_V10 for valid tool names. Each entry must have
                 the shape {"function": {"name": "..."}}.
+        prompts: Optional list of user prompts (for TTCA P0 tool-task alignment).
+        role: Optional swarm role name. When set, loads role-specific weights
+              from role_reward_weights. When None, uses default WEIGHTS.
+        weights: Explicit weight dict override (for testing/custom configs).
         **kwargs: Ignored (allows GRPOTrainer to pass extra context).
 
     Returns:
         List of float rewards in [0.0, 1.0], one per completion.
     """
+    # Select weight table: explicit override > role-specific > default
+    if weights is not None:
+        active_weights = weights
+    elif role is not None:
+        from src.phase4c_rl.rewards.role_reward_weights import get_weights
+        active_weights = get_weights(role)
+    else:
+        active_weights = WEIGHTS
+
     # Allow runtime schema override.
     global VALID_TOOL_NAMES
-    if schema is not None:
-        valid_names = {t["function"]["name"] for t in schema}
-    else:
-        valid_names = VALID_TOOL_NAMES
-
-    # Temporarily swap for the per-call checkers that read the global.
     original_valid = VALID_TOOL_NAMES
     if schema is not None:
-        VALID_TOOL_NAMES = valid_names
+        VALID_TOOL_NAMES = {t["function"]["name"] for t in schema}
+
+    # Map component names to scoring functions.
+    _COMPONENT_FNS = {
+        "has_valid_tool_call_tags": lambda r, p: _has_valid_tool_call_tags(r),
+        "tool_name_in_schema": lambda r, p: _tool_name_in_schema(r),
+        "has_reasoning_prefix": lambda r, p: _has_reasoning_prefix(r),
+        "no_hallucinated_tools": lambda r, p: _no_hallucinated_tools(r),
+        "ends_cleanly_after_tag": lambda r, p: _ends_cleanly_after_tag(r),
+        "persona_aligned_reasoning": lambda r, p: _persona_aligned_reasoning(r),
+        "tool_selection_quality": lambda r, p: _tool_selection_quality(r, p),
+        "reasoning_efficiency": lambda r, p: _reasoning_efficiency(r),
+    }
 
     rewards = []
-    for response in completions:
-        score = (
-            WEIGHTS["has_valid_tool_call_tags"] * _has_valid_tool_call_tags(response)
-            + WEIGHTS["tool_name_in_schema"] * _tool_name_in_schema(response)
-            + WEIGHTS["has_reasoning_prefix"] * _has_reasoning_prefix(response)
-            + WEIGHTS["no_hallucinated_tools"] * _no_hallucinated_tools(response)
-            + WEIGHTS["ends_cleanly_after_tag"] * _ends_cleanly_after_tag(response)
-        )
-        if persona_reward:
-            score += WEIGHTS["persona_aligned_reasoning"] * _persona_aligned_reasoning(response)
+    for i, response in enumerate(completions):
+        prompt = prompts[i] if prompts and i < len(prompts) else None
+        score = 0.0
+        for component, weight in active_weights.items():
+            if weight == 0.0:
+                continue
+            if not persona_reward and component == "persona_aligned_reasoning":
+                continue
+            fn = _COMPONENT_FNS.get(component)
+            if fn:
+                score += weight * fn(response, prompt)
         rewards.append(score)
 
-    # Restore global.
     VALID_TOOL_NAMES = original_valid
-
     return rewards
 
 
@@ -188,31 +326,52 @@ def tool_call_reward_detailed(
     response: str,
     schema: Optional[list[dict]] = None,
     persona_reward: bool = True,
+    prompt: str | None = None,
+    role: str | None = None,
+    weights: dict[str, float] | None = None,
 ) -> dict:
     """Score a single response and return per-component breakdown.
 
     Useful for diagnostics and negative collection.
     """
+    if weights is not None:
+        active_weights = weights
+    elif role is not None:
+        from src.phase4c_rl.rewards.role_reward_weights import get_weights
+        active_weights = get_weights(role)
+    else:
+        active_weights = WEIGHTS
+
     global VALID_TOOL_NAMES
     original_valid = VALID_TOOL_NAMES
     if schema is not None:
         VALID_TOOL_NAMES = {t["function"]["name"] for t in schema}
 
-    components = {
-        "has_valid_tool_call_tags": _has_valid_tool_call_tags(response),
-        "tool_name_in_schema": _tool_name_in_schema(response),
-        "has_reasoning_prefix": _has_reasoning_prefix(response),
-        "no_hallucinated_tools": _no_hallucinated_tools(response),
-        "ends_cleanly_after_tag": _ends_cleanly_after_tag(response),
+    _COMPONENT_FNS = {
+        "has_valid_tool_call_tags": lambda: _has_valid_tool_call_tags(response),
+        "tool_name_in_schema": lambda: _tool_name_in_schema(response),
+        "has_reasoning_prefix": lambda: _has_reasoning_prefix(response),
+        "no_hallucinated_tools": lambda: _no_hallucinated_tools(response),
+        "ends_cleanly_after_tag": lambda: _ends_cleanly_after_tag(response),
+        "persona_aligned_reasoning": lambda: _persona_aligned_reasoning(response),
+        "tool_selection_quality": lambda: _tool_selection_quality(response, prompt),
+        "reasoning_efficiency": lambda: _reasoning_efficiency(response),
     }
-    if persona_reward:
-        components["persona_aligned_reasoning"] = _persona_aligned_reasoning(response)
-    total = sum(WEIGHTS[k] * v for k, v in components.items())
+
+    components = {}
+    for component, weight in active_weights.items():
+        if not persona_reward and component == "persona_aligned_reasoning":
+            continue
+        fn = _COMPONENT_FNS.get(component)
+        if fn:
+            components[component] = fn()
+
+    total = sum(active_weights.get(k, 0) * v for k, v in components.items())
 
     VALID_TOOL_NAMES = original_valid
 
     return {
         "total_reward": total,
         "components": components,
-        "weights": dict(WEIGHTS),
+        "weights": dict(active_weights),
     }

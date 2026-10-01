@@ -77,6 +77,15 @@ class FARCAPipeline:
 
         self._step = 0
 
+    @staticmethod
+    def _extract_first_tool(completion: str) -> str | None:
+        """Extract the first tool name from <tool_call> tags."""
+        import re
+        match = re.search(
+            r'<tool_call>\s*\{[^}]*"name"\s*:\s*"([^"]+)"', completion
+        )
+        return match.group(1) if match else None
+
     def process_batch(
         self,
         completions: list[str],
@@ -127,8 +136,15 @@ class FARCAPipeline:
             if prompts and i < len(prompts):
                 prompt_evidence = prompts[i] + " " + evidence
 
+            # Extract actual first tool for coherence checking (TTCA P4)
+            actual_first_tool = None
+            if self.config.coherence_enabled:
+                actual_first_tool = self._extract_first_tool(completions[i])
+
             # M2: Verify
-            verifications = self.verifier.verify_batch(claims_i, prompt_evidence)
+            verifications = self.verifier.verify_batch(
+                claims_i, prompt_evidence, actual_first_tool=actual_first_tool,
+            )
 
             # M3: Reliability
             reliabilities = self.attributor.compute_batch(

@@ -248,6 +248,77 @@ def build_persona_pairs(identity_path: str | Path, seed: int = 42) -> list[dict]
     return records
 
 
+def build_conciseness_pairs(
+    positives: list[dict],
+    seed: int = 42,
+    target_count: int = 200,
+) -> list[dict]:
+    """TTCA P5: Build DPO pairs where chosen=concise, rejected=verbose.
+
+    Takes high-quality positives with short reasoning + correct tool call,
+    generates verbose variants by prepending filler and restating tool descriptions.
+    """
+    import re
+    rng = __import__("random").Random(seed)
+
+    FILLER_PREFIXES = [
+        "Let me think about this carefully. ",
+        "Okay, so the user is asking me to ",
+        "I need to consider what the best approach would be here. ",
+        "Looking at this request, I can see that ",
+        "First, let me understand what's being asked. The user wants me to ",
+        "This is an interesting task. Let me break it down step by step. ",
+        "Before I proceed, I want to make sure I understand the request correctly. ",
+        "Alright, let me analyze this situation. ",
+    ]
+
+    FILLER_SUFFIXES = [
+        " This tool is designed for exactly this kind of task, so it should work well.",
+        " I believe this is the most appropriate approach given the circumstances.",
+        " Let me go ahead and execute this now.",
+        " This should give us the information we need to proceed.",
+        " I'm confident this is the right tool for the job here.",
+    ]
+
+    pairs = []
+    for pos in positives:
+        messages = pos.get("messages", [])
+        prompt = _extract_prompt(messages)
+        response = _extract_last_assistant_response(messages)
+        if not prompt or not response:
+            continue
+        if "<tool_call>" not in response:
+            continue
+
+        idx = response.find("<tool_call>")
+        reasoning = response[:idx].strip()
+        tool_part = response[idx:]
+
+        if len(reasoning) > 150 or len(reasoning) < 10:
+            continue
+
+        verbose = (
+            rng.choice(FILLER_PREFIXES)
+            + reasoning
+            + rng.choice(FILLER_SUFFIXES)
+            + "\n\n"
+            + tool_part
+        )
+
+        pairs.append({
+            "prompt": prompt,
+            "chosen": response,
+            "rejected": verbose,
+        })
+
+        if len(pairs) >= target_count:
+            break
+
+    rng.shuffle(pairs)
+    logger.info("Built %d conciseness DPO pairs", len(pairs))
+    return pairs
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Build DPO preference pairs from negatives + positives"
@@ -266,6 +337,8 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--identity-examples", default=None,
                         help="JSONL file of identity examples for persona DPO pairs")
+    parser.add_argument("--include-conciseness-pairs", action="store_true",
+                        help="Add 150-200 conciseness preference pairs (TTCA P5)")
     args = parser.parse_args()
 
     import random
@@ -285,6 +358,12 @@ def main():
         persona_pairs = build_persona_pairs(args.identity_examples, seed=args.seed)
         pairs.extend(persona_pairs)
         logger.info("Total pairs after persona addition: %d", len(pairs))
+
+    # Add conciseness pairs (TTCA P5, opt-in)
+    if args.include_conciseness_pairs:
+        conciseness = build_conciseness_pairs(positives, seed=args.seed)
+        pairs.extend(conciseness)
+        logger.info("Total pairs after conciseness addition: %d", len(pairs))
 
     if not pairs:
         raise SystemExit("No DPO pairs generated")

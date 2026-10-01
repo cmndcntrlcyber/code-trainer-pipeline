@@ -30,6 +30,10 @@ class FARCAConfig:
     # M5: Advantage reshaping
     warmup_steps: int = 0
 
+    # M6: Reasoning-action coherence (TTCA P4, opt-in)
+    coherence_enabled: bool = False
+    coherence_weight: float = 0.3
+
     # General
     device: str = "cpu"
     cache_claims: bool = True

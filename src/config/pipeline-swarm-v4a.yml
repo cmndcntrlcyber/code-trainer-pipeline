@@ -1,0 +1,357 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  NEXUS SWARM v4a — Role-Specialized Multi-Model Pipeline       ║
+# ║  Layout A (without P40): 4 models, 5 nodes, $54.56 budget     ║
+# ║                                                                 ║
+# ║  Based on: docs/enhancements/v4/swarm optimization/             ║
+# ║            nexus-swarm-scaffold-v4a.2.md                        ║
+# ║  Incorporates: reasoning-speed-ttca.md (TTCA P0-P5)            ║
+# ║                v4.0-identity-abliterated-gemma26B.md            ║
+# ║                                                                 ║
+# ║  TOPOLOGY: K1 (5060 Ti) = dedicated orchestrator                ║
+# ║            daedelu5 (3070) = control plane + worker              ║
+# ║            3060 laptop = edge explore                            ║
+# ║            OPi 5 Plus = triage (NPU)                             ║
+# ║            OPi 5B = embeddings (ARM)                             ║
+# ║                                                                  ║
+# ║  DESIGN PRINCIPLE: All swarm-specific behavior is opt-in.       ║
+# ║  Existing single-model pipelines (pipeline-50.yml,              ║
+# ║  pipeline-gemma26b.yml) are completely unaffected.              ║
+# ╚══════════════════════════════════════════════════════════════════╝
+#
+# USAGE:
+#   # All roles:
+#   python -m src.scripts.launch_swarm_pipeline \
+#       --config src/config/pipeline-swarm-v4a.yml --role all --wait
+#
+#   # Single role:
+#   python -m src.phase4_qwen_finetuning.scripts.launch_full_training \
+#       --config src/config/pipeline-swarm-v4a.yml --role orchestrator --wait
+#
+#   # Subset:
+#   python -m src.scripts.launch_swarm_pipeline \
+#       --config src/config/pipeline-swarm-v4a.yml --role orchestrator worker --wait
+
+# ─── Swarm Fleet Topology (informational) ───────────────────────
+swarm_meta:
+  layout: "v4a"
+  description: "5-node swarm, Layout A (without P40). Control plane colocates with worker on daedelu5."
+  nodes:
+    - hostname: nexus-k1
+      ip: 192.168.8.238
+      gpu: "RTX 5060 Ti (16 GB)"
+      host: "ACEMAGIC K1 (Ryzen 7 7730U, 32 GB DDR4)"
+      role: orchestrator
+      port: 8080
+    - hostname: nexus-control
+      ip: 192.168.8.248
+      gpu: "RTX 3070 Laptop (8 GB)"
+      host: "daedelu5"
+      role: control_plane+worker
+      ports: [4000, 8084, 9100, 50051, 50052]
+    - hostname: nexus-3060
+      ip: 192.168.8.161
+      gpu: "RTX 3060 Laptop (6 GB)"
+      role: explore
+      port: 8086
+    - hostname: nexus-opi5p
+      ip: 192.168.8.224
+      gpu: "RK3588 NPU (6 TOPS)"
+      role: triage
+      port: 8088
+    - hostname: nexus-opi5b
+      ip: 192.168.8.221
+      gpu: "RK3588S CPU (ARM)"
+      role: embeddings
+      port: 8087
+
+# ─── Shared Data Paths ──────────────────────────────────────────
+data_collection:
+  github_token: ${GITHUB_TOKEN}
+  repos_dir: ./data/sample-data/repositories
+  captures_dir: ./data/sample-data/captures
+  catalog_db: ./data/catalog.db
+
+preprocessing:
+  dataset_name: cmndcntrlcyber/code-trainer-offsec-dataset
+
+# ═══════════════════════════════════════════════════════════════════
+# ORCHESTRATOR — Qwen2.5-Coder-14B on K1's RTX 5060 Ti (16 GB)
+# Budget: $28.80 (9.0h)
+# Phase chain: SFT → validation → FARCA-GRPO → DPO → validation → GGUF
+# ═══════════════════════════════════════════════════════════════════
+orchestrator:
+  role: "orchestrator"
+  base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+  dapt_adapter: ${HF_USERNAME}/qwen14b-dapt-offsec
+
+  sft:
+    dataset_id: ${HF_USERNAME}/code-trainer-v11-orchestrator
+    dataset_revision: "main"
+    train_limit: 12000
+    num_epochs: 1
+    max_seq_length: 4096
+    lora_r: 32
+    lora_alpha: 64
+    lora_dropout: 0.05
+    learning_rate: 1e-4
+    batch_size: 1
+    gradient_accumulation: 16
+    output_adapter: ${HF_USERNAME}/qwen14b-orchestrator-sft
+
+  validation:
+    tool_call_pass_rate: 0.75
+    tool_call_scenarios: 14
+    gsm8k_threshold: 0.55
+    agent_progress_threshold: 3
+    agent_scenarios: 7
+
+  rl:
+    grpo:
+      base_adapter: ${HF_USERNAME}/qwen14b-orchestrator-sft
+      dapt_adapter: ${HF_USERNAME}/qwen14b-dapt-offsec
+      base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+      prompt_dataset: ${HF_USERNAME}/code-trainer-v11-grpo-orchestrator
+      num_generations: 4
+      learning_rate: 5e-7
+      kl_coef: 0.1
+      max_new_tokens: 768
+      max_prompts: 400
+      output_adapter: ${HF_USERNAME}/qwen14b-orchestrator-farca
+      role: "orchestrator"
+
+    farca_grpo:
+      base_adapter: ${HF_USERNAME}/qwen14b-orchestrator-sft
+      dapt_adapter: ${HF_USERNAME}/qwen14b-dapt-offsec
+      base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+      prompt_dataset: ${HF_USERNAME}/code-trainer-v11-grpo-orchestrator
+      num_generations: 4
+      learning_rate: 5e-7
+      kl_coef: 0.1
+      max_new_tokens: 768
+      max_prompts: 400
+      output_adapter: ${HF_USERNAME}/qwen14b-orchestrator-farca
+      role: "orchestrator"
+      claim_extraction_backend: "rule_based"
+      nli_model_id: "vectara/hallucination_evaluation_model"
+      sentence_encoder_id: "all-MiniLM-L6-v2"
+      k_rel: 1
+      mu: 0.16
+      tau: 0.20
+      nli_weight: 0.4
+      rule_weight: 0.6
+      warmup_steps: 0
+      coherence_enabled: true
+      coherence_weight: 0.3
+
+    dpo:
+      base_adapter: ${HF_USERNAME}/qwen14b-orchestrator-farca
+      base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+      preference_dataset: ${HF_USERNAME}/code-trainer-v11-dpo-orchestrator
+      beta: 0.1
+      learning_rate: 1e-6
+      max_length: 4096
+      max_pairs: 1150
+      output_adapter: ${HF_USERNAME}/qwen14b-orchestrator-dpo
+      include_persona_pairs: true
+      persona_pairs_path: data/identity_examples/nexus_identity.jsonl
+
+    rl_validation:
+      tool_call_pass_rate: 0.80
+      tool_call_scenarios: 14
+      agent_progress_threshold: 5
+      agent_scenarios: 7
+
+  deployment:
+    quantization: "Q4_K_M"
+    context_length: 12288
+    port: 8080
+    gguf_repo: ${HF_USERNAME}/qwen14b-orchestrator-gguf
+    source_adapter: ${HF_USERNAME}/qwen14b-orchestrator-dpo
+    adapter_chain:
+      - ${HF_USERNAME}/qwen14b-dapt-offsec
+      - ${HF_USERNAME}/qwen14b-orchestrator-sft
+    base_model: "Qwen/Qwen2.5-Coder-14B-Instruct"
+
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-swarm-v4a-orchestrator"
+    timeout_seconds: 28800
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+    quants:
+      - "Q4_K_M"
+
+# ═══════════════════════════════════════════════════════════════════
+# WORKER — Qwen3-8B on daedelu5's RTX 3070 (8 GB)
+# Budget: $10.88 (3.4h)
+# Phase chain: SFT → validation → GRPO → validation → GGUF
+# Colocated with control plane services on daedelu5 (CPU-bound, no VRAM conflict)
+# ═══════════════════════════════════════════════════════════════════
+worker:
+  role: "worker"
+  base_model: "Qwen/Qwen3-8B"
+
+  sft:
+    dataset_id: ${HF_USERNAME}/code-trainer-v11-worker
+    dataset_revision: "main"
+    train_limit: 8000
+    num_epochs: 1
+    max_seq_length: 4096
+    lora_r: 32
+    lora_alpha: 64
+    lora_dropout: 0.05
+    learning_rate: 1e-4
+    batch_size: 1
+    gradient_accumulation: 16
+    output_adapter: ${HF_USERNAME}/qwen3-8b-worker-sft
+    # Qwen3 thinking mode: disable for worker role (fast execution)
+    enable_thinking: false
+
+  validation:
+    tool_call_pass_rate: 0.80
+    tool_call_scenarios: 14
+
+  rl:
+    grpo:
+      base_adapter: ${HF_USERNAME}/qwen3-8b-worker-sft
+      base_model: "Qwen/Qwen3-8B"
+      prompt_dataset: ${HF_USERNAME}/code-trainer-v11-grpo-worker
+      num_generations: 4
+      learning_rate: 5e-7
+      kl_coef: 0.1
+      max_new_tokens: 768
+      max_prompts: 300
+      output_adapter: ${HF_USERNAME}/qwen3-8b-worker-grpo
+      role: "worker"
+
+    rl_validation:
+      tool_call_pass_rate: 0.85
+      tool_call_scenarios: 14
+
+  deployment:
+    quantization: "Q4_K_M"
+    context_length: 4096
+    port: 8084
+    gguf_repo: ${HF_USERNAME}/qwen3-8b-worker-gguf
+    source_adapter: ${HF_USERNAME}/qwen3-8b-worker-grpo
+    adapter_chain:
+      - ${HF_USERNAME}/qwen3-8b-worker-sft
+    base_model: "Qwen/Qwen3-8B"
+
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-swarm-v4a-worker"
+    timeout_seconds: 16200
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+    quants:
+      - "Q4_K_M"
+
+# ═══════════════════════════════════════════════════════════════════
+# EXPLORE — google/gemma-4-4b-it on RTX 3060 (6 GB)
+# Budget: $3.68 (1.15h)
+# Phase chain: SFT → validation → GGUF (no RL)
+# ═══════════════════════════════════════════════════════════════════
+explore:
+  role: "explore"
+  base_model: "google/gemma-4-4b-it"
+
+  sft:
+    dataset_id: ${HF_USERNAME}/code-trainer-v11-explore
+    dataset_revision: "main"
+    train_limit: 5000
+    num_epochs: 1
+    max_seq_length: 4096
+    lora_r: 32
+    lora_alpha: 64
+    lora_dropout: 0.05
+    learning_rate: 5e-5
+    batch_size: 1
+    gradient_accumulation: 16
+    output_adapter: ${HF_USERNAME}/gemma4-4b-explore-sft
+
+  validation:
+    classification_accuracy: 0.80
+    zero_write_tool_violations: true
+
+  deployment:
+    quantization: "Q8_0"
+    context_length: 4096
+    port: 8086
+    gguf_repo: ${HF_USERNAME}/gemma4-4b-explore-gguf
+    source_adapter: ${HF_USERNAME}/gemma4-4b-explore-sft
+    base_model: "google/gemma-4-4b-it"
+
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-swarm-v4a-explore"
+    timeout_seconds: 5400
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+    quants:
+      - "Q8_0"
+
+# ═══════════════════════════════════════════════════════════════════
+# TRIAGE — Qwen3.5-0.8B on RK3588 NPU
+# Budget: $1.60 (0.5h)
+# Phase chain: SFT → validation → RKLLM (no RL)
+# ═══════════════════════════════════════════════════════════════════
+triage:
+  role: "triage"
+  base_model: "Qwen/Qwen3.5-0.8B"
+
+  sft:
+    dataset_id: ${HF_USERNAME}/code-trainer-v11-triage
+    dataset_revision: "main"
+    train_limit: 3000
+    num_epochs: 1
+    max_seq_length: 512
+    lora_r: 16
+    lora_alpha: 32
+    lora_dropout: 0.05
+    learning_rate: 2e-4
+    batch_size: 4
+    gradient_accumulation: 4
+    output_adapter: ${HF_USERNAME}/qwen35-08b-triage-sft
+
+  validation:
+    routing_accuracy: 0.85
+
+  deployment:
+    format: "rkllm"
+    target: "w8a8"
+    target_platform: "rk3588"
+    port: 8088
+    rkllm_repo: ${HF_USERNAME}/qwen35-08b-triage-rkllm
+
+  cloud:
+    hardware: "a100-large"
+    wandb_project: "rtpi-swarm-v4a-triage"
+    timeout_seconds: 3600
+    poll_interval: 60
+    image: "huggingface/transformers-pytorch-gpu:latest"
+    repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
+    repo_ref: "main"
+
+# ─── CONTINGENCY PLAN ───────────────────────────────────────────
+#
+# $9.60 (3h) reserved for retries. Priority order:
+#
+#   1. Orchestrator SFT retry: --train-limit 8000 (saves ~2h)
+#   2. Worker GRPO retry: max_prompts=150 (saves ~0.5h)
+#   3. Skip explore — base model with system prompt may suffice
+#   4. Skip triage — Modelfile system prompt injection as interim
+#
+# QWEN3 FALLBACK: If Qwen3-8B training is unstable:
+#   - Fall back to Qwen2.5-Coder-7B (proven architecture)
+#   - Same LoRA targets, same training infrastructure
+#
+# RKLLM FALLBACK: If rkllm-toolkit doesn't support Qwen3.5-0.8B:
+#   - Use llama.cpp ARM build with Q8_0 GGUF on CPU
+#   - Slower but universally compatible

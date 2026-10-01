@@ -105,8 +105,13 @@ def main():
     logger.info("Loading prompt dataset: %s", prompt_dataset)
     ds = load_dataset(prompt_dataset, split="train")
 
-    from src.config.nexus_identity import build_nexus_system_prompt
-    system_prompt = build_nexus_system_prompt(NEXUS_TOOLS_V10)
+    grpo_role_name = params.get("role")
+    if grpo_role_name:
+        from src.config.nexus_role_identities import build_role_system_prompt
+        system_prompt = build_role_system_prompt(grpo_role_name, NEXUS_TOOLS_V10)
+    else:
+        from src.config.nexus_identity import build_nexus_system_prompt
+        system_prompt = build_nexus_system_prompt(NEXUS_TOOLS_V10)
 
     def format_prompt(example):
         messages = [
@@ -176,10 +181,16 @@ def main():
     model.print_trainable_parameters()
 
     # ── 4. GRPO reward wrapper ────────────────────────────────────────────
+    grpo_role = params.get("role")  # None for single-model, "orchestrator"/"worker" for swarm
+
     def reward_fn(prompts, completions, **kwargs):
         """Wrap tool_call_reward for GRPOTrainer interface.
         Completions are already decoded strings in trl 1.3.0+."""
-        return tool_call_reward(completions)
+        return tool_call_reward(
+            completions,
+            prompts=prompts if grpo_role else None,
+            role=grpo_role,
+        )
 
     # ── 5. Training config ────────────────────────────────────────────────
     wandb_mode = os.environ.get("WANDB_MODE")

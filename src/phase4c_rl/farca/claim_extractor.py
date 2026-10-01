@@ -149,8 +149,16 @@ class ClaimExtractor:
                 result.append(p)
         return result if result else [sentence]
 
+    _JUSTIFICATION_KEYWORDS = (
+        "should", "need to", "will use", "because", "therefore",
+        "going to use", "best tool", "right tool", "appropriate",
+    )
+
     def _classify(self, text: str) -> str:
         if self.tool_pattern.search(text):
+            lower = text.lower()
+            if any(kw in lower for kw in self._JUSTIFICATION_KEYWORDS):
+                return "tool_choice_justification"
             return "tool_selection"
         if _ARG_PATTERN.search(text):
             return "argument_claim"

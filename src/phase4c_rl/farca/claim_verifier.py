@@ -62,7 +62,12 @@ class ClaimVerifier:
         self,
         claim: AtomicClaim,
         evidence: str,
+        actual_first_tool: str | None = None,
     ) -> VerificationResult:
+        if claim.claim_type == "tool_choice_justification":
+            return self._verify_tool_choice_justification(
+                claim, evidence, actual_first_tool
+            )
         if claim.claim_type == "tool_selection":
             return self._verify_tool_selection(claim, evidence)
         elif claim.claim_type == "argument_claim":
@@ -74,8 +79,12 @@ class ClaimVerifier:
         self,
         claims: list[AtomicClaim],
         evidence: str,
+        actual_first_tool: str | None = None,
     ) -> list[VerificationResult]:
-        return [self.verify(c, evidence) for c in claims]
+        return [
+            self.verify(c, evidence, actual_first_tool=actual_first_tool)
+            for c in claims
+        ]
 
     # ── rule-based verification ──
 
@@ -159,6 +168,33 @@ class ClaimVerifier:
             entailment_score=h,
             factual_score=2.0 * h - 1.0,
             method="nli",
+        )
+
+    def _verify_tool_choice_justification(
+        self,
+        claim: AtomicClaim,
+        evidence: str,
+        actual_first_tool: str | None = None,
+    ) -> VerificationResult:
+        """TTCA P4: Verify that the mentioned tool matches the actual first tool called."""
+        mentioned = self._extract_tool_names(claim.text)
+        if not mentioned or actual_first_tool is None:
+            return self._verify_tool_selection(claim, evidence)
+
+        match = any(
+            m.lower() == actual_first_tool.lower() for m in mentioned
+        )
+        h = 1.0 if match else 0.0
+        checks = {
+            f"justification_match:{mentioned[0]}": match,
+            "actual_tool": actual_first_tool,
+        }
+        return VerificationResult(
+            claim_text=claim.text,
+            entailment_score=h,
+            factual_score=2.0 * h - 1.0,
+            method="rule",
+            rule_checks=checks,
         )
 
     # ── NLI verification ──

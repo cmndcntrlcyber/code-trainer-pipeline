@@ -204,6 +204,140 @@ def _generate_synthetic_prompts() -> list[dict]:
     return prompts
 
 
+def _generate_tool_selection_exercises() -> list[dict]:
+    """TTCA P0: 150 prompts with clear 'right tool' answers."""
+    exercises = [
+        ("Read the file /etc/passwd and check for suspicious accounts.", "Read"),
+        ("Search the codebase for hardcoded API keys.", "Grep"),
+        ("Find all YAML config files in the project.", "Glob"),
+        ("List what's in the /var/log directory.", "LS"),
+        ("Edit config.yaml to change the port from 8080 to 9090.", "Edit"),
+        ("Create a Python script that scans for open ports.", "Write"),
+        ("Run nmap against the target 10.10.10.5.", "Bash"),
+        ("Fetch the robots.txt from https://target.htb.", "WebFetch"),
+        ("Check if 192.168.1.100 is in our engagement scope.", "ScopeCheck"),
+        ("Delegate subdomain enumeration to the recon agent.", "Task"),
+        ("Read the SSH config at ~/.ssh/config.", "Read"),
+        ("Search for 'password' in all Python files.", "Grep"),
+        ("Find all shell scripts in the project.", "Glob"),
+        ("What files are in /tmp?", "LS"),
+        ("Fix the typo in main.py: change 'recieve' to 'receive'.", "Edit"),
+        ("Write a reverse shell payload to /tmp/shell.py.", "Write"),
+        ("Run a directory brute-force with gobuster.", "Bash"),
+        ("Download the page at https://target.htb/admin.", "WebFetch"),
+        ("Verify 10.10.10.0/24 is authorized for scanning.", "ScopeCheck"),
+        ("Have the exploiter agent test the SQL injection.", "Task"),
+    ]
+    import random
+    rng = random.Random(42)
+
+    templates_per_tool = {
+        "Read": [
+            "Show me {path}.", "What does {path} contain?",
+            "Open and review {path}.", "Display {path}.",
+        ],
+        "Grep": [
+            "Search for '{pat}' in {path}.", "Find '{pat}' across the codebase.",
+            "Where is '{pat}' used?",
+        ],
+        "Glob": [
+            "Find all {ext} files.", "List {ext} files under {path}.",
+        ],
+        "LS": [
+            "What's in {path}?", "Show directory {path}.",
+        ],
+        "Edit": [
+            "In {path}, change '{old}' to '{new}'.",
+            "Update {path}: replace '{old}' with '{new}'.",
+        ],
+        "Bash": [
+            "Run {cmd}.", "Execute: {cmd}.",
+        ],
+        "ScopeCheck": [
+            "Is {target} in scope?", "Check scope for {target}.",
+        ],
+    }
+    fills = {
+        "path": ["/etc/shadow", "src/main.py", "~/.bashrc", "data/creds.txt"],
+        "pat": ["TODO", "secret", "api_key", "eval(", "exec("],
+        "ext": ["*.py", "*.sh", "*.conf", "*.yml"],
+        "old": ["debug=True", "0.0.0.0", "v1"],
+        "new": ["debug=False", "127.0.0.1", "v2"],
+        "cmd": ["netstat -tlnp", "ss -tuln", "id", "whoami", "curl -s ifconfig.me"],
+        "target": ["10.10.10.5", "target.htb", "192.168.1.0/24"],
+    }
+
+    prompts = []
+    for prompt_text, tool in exercises:
+        prompts.append({
+            "prompt": prompt_text,
+            "source": "tool_selection_exercise",
+            "expected_tool": tool,
+        })
+
+    for tool, tmpls in templates_per_tool.items():
+        for tmpl in tmpls:
+            filled = tmpl
+            for key, vals in fills.items():
+                ph = "{" + key + "}"
+                if ph in filled:
+                    filled = filled.replace(ph, rng.choice(vals))
+            prompts.append({
+                "prompt": filled,
+                "source": "tool_selection_exercise",
+                "expected_tool": tool,
+            })
+
+    rng.shuffle(prompts)
+    prompts = prompts[:150]
+    logger.info("Generated %d tool-selection exercise prompts", len(prompts))
+    return prompts
+
+
+def _generate_role_prompts(role: str) -> list[dict]:
+    """Generate role-specific swarm prompts."""
+    prompts = []
+    if role == "orchestrator":
+        delegation_prompts = [
+            "Perform a full reconnaissance of 10.10.10.5 including port scanning, service enumeration, and vulnerability assessment.",
+            "Audit the web application at https://target.htb for OWASP Top 10 vulnerabilities and generate a report.",
+            "Enumerate all subdomains of target.htb, scan each for open ports, and identify potential entry points.",
+            "Check all files in /var/www/html for hardcoded credentials, then test any found credentials against the SSH service.",
+            "Scan the network 192.168.1.0/24 for live hosts, identify services, and prioritize targets by attack surface.",
+            "Review the source code in src/ for security vulnerabilities, then write exploits for any critical findings.",
+            "Perform a privilege escalation assessment: enumerate SUID binaries, cron jobs, and writable paths.",
+            "Map the attack surface of the target: DNS records, open ports, web technologies, and potential entry points.",
+            "Coordinate a full engagement: scope check, recon, vulnerability scan, exploitation, and report generation.",
+            "Investigate the suspicious process on port 4444: identify it, check for persistence mechanisms, and document findings.",
+        ]
+        for p in delegation_prompts:
+            prompts.append({
+                "prompt": p,
+                "source": f"role_{role}",
+                "expected_tool": "Task",
+            })
+    elif role == "worker":
+        execution_prompts = [
+            "Parse this nmap output and extract all open ports with service versions.",
+            "Run gobuster against https://target.htb with the common.txt wordlist.",
+            "Read /etc/crontab and identify any suspicious scheduled tasks.",
+            "Execute 'find / -perm -4000 -type f 2>/dev/null' and format the SUID binaries found.",
+            "Search the codebase for SQL injection patterns: string concatenation in queries.",
+            "Run nuclei with the cves/ template directory against 10.10.10.5.",
+            "Check if the SSH service on port 22 accepts password authentication.",
+            "Read the Apache access log and summarize the last 50 requests.",
+            "Execute linpeas.sh and return a summary of privilege escalation vectors found.",
+            "Grep for 'password', 'secret', and 'token' across all config files.",
+        ]
+        for p in execution_prompts:
+            prompts.append({
+                "prompt": p,
+                "source": f"role_{role}",
+            })
+    logger.info("Generated %d %s role prompts", len(prompts), role)
+    return prompts
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Build GRPO prompt dataset from V10 evals and V9 training"
@@ -213,6 +347,11 @@ def main():
     parser.add_argument("--max-prompts", type=int, default=1000)
     parser.add_argument("--push-to-hub", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--role", default=None,
+                        choices=["orchestrator", "worker"],
+                        help="Swarm role — adds role-specific prompts")
+    parser.add_argument("--include-tool-selection-exercises", action="store_true",
+                        help="Add 150 TTCA P0 tool-selection exercise prompts")
     args = parser.parse_args()
 
     import random
@@ -233,6 +372,14 @@ def main():
 
     # 3. Synthetic prompts.
     all_prompts.extend(_generate_synthetic_prompts())
+
+    # 4. Tool-selection exercises (TTCA P0, opt-in).
+    if args.include_tool_selection_exercises:
+        all_prompts.extend(_generate_tool_selection_exercises())
+
+    # 5. Role-specific prompts (swarm, opt-in).
+    if args.role:
+        all_prompts.extend(_generate_role_prompts(args.role))
 
     # Deduplicate by prompt text.
     seen = set()
