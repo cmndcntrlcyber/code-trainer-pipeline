@@ -222,7 +222,7 @@ orchestrator:
     poll_interval: 60
     image: "huggingface/transformers-pytorch-gpu:latest"
     repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
-    repo_ref: "main"
+    repo_ref: "offense"
     quants:
       - "Q4_K_M"
 
@@ -334,7 +334,7 @@ worker:
     poll_interval: 60
     image: "huggingface/transformers-pytorch-gpu:latest"
     repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
-    repo_ref: "main"
+    repo_ref: "offense"
     quants:
       - "Q4_K_M"
 
@@ -437,7 +437,7 @@ explore:
     poll_interval: 60
     image: "huggingface/transformers-pytorch-gpu:latest"
     repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
-    repo_ref: "main"
+    repo_ref: "offense"
     quants:
       - "Q8_0"
 
@@ -497,7 +497,7 @@ triage:
     poll_interval: 60
     image: "huggingface/transformers-pytorch-gpu:latest"
     repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
-    repo_ref: "main"
+    repo_ref: "offense"
 
 # ─── CONTINGENCY PLAN ───────────────────────────────────────────
 #
