@@ -103,7 +103,7 @@ orchestrator:
       poll_interval: 60
       image: "huggingface/transformers-pytorch-gpu:latest"
       repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
-      repo_ref: "main"
+      repo_ref: "offense"
 
   sft:
     dapt_adapter: ${HF_USERNAME}/qwen3-14b-dapt-offsec
@@ -211,7 +211,7 @@ orchestrator:
       poll_interval: 60
       image: "huggingface/transformers-pytorch-gpu:latest"
       repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
-      repo_ref: "main"
+      repo_ref: "offense"
       quants:
         - "Q4_K_M"
 
@@ -258,7 +258,7 @@ worker:
       poll_interval: 60
       image: "huggingface/transformers-pytorch-gpu:latest"
       repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
-      repo_ref: "main"
+      repo_ref: "offense"
 
   sft:
     dapt_adapter: ${HF_USERNAME}/qwen3-8b-dapt-offsec
@@ -370,7 +370,7 @@ explore:
       poll_interval: 60
       image: "huggingface/transformers-pytorch-gpu:latest"
       repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
-      repo_ref: "main"
+      repo_ref: "offense"
 
   sft:
     dapt_adapter: ${HF_USERNAME}/gemma4-4b-dapt-classify
