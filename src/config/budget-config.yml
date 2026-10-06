@@ -61,7 +61,7 @@ v9_mixed:
   slice_b_multi:
     synthetic_count: 2000
   slice_c:
-    source: greghavens/fable-5-coding-and-debugging-traces
+    source: greghavens/kimi-k3-coding-and-debugging-traces
     max_rows: 10000
   slice_d:
     source: teknium/OpenHermes-2.5

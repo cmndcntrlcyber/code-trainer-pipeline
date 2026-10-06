@@ -33,7 +33,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 from src.phase3_vision_model.hf_skills import (
     VisionJobSpec as JobSpec,
     submit_vision_job as submit_job,
@@ -86,12 +86,20 @@ def main():
     parser.add_argument("--skip-tool-call", action="store_true")
     parser.add_argument("--skip-agent", action="store_true")
     parser.add_argument("--skip-gsm8k", action="store_true")
+    parser.add_argument("--role", default=None,
+                        help="Swarm role — reads cloud config from <role> section")
     args = parser.parse_args()
 
     config = load_config(args.config)
-    qf_cfg = config.get("qwen_finetuning", {})
-    cloud_cfg = qf_cfg.get("cloud", {})
-    model_id = qf_cfg.get("model", "Qwen/Qwen2.5-Coder-14B-Instruct")
+    if args.role:
+        role_cfg = config.get(args.role, {})
+        qf_cfg = role_cfg
+        cloud_cfg = role_cfg.get("cloud", {})
+        model_id = role_cfg.get("base_model", role_cfg.get("model", "Qwen/Qwen2.5-Coder-14B-Instruct"))
+    else:
+        qf_cfg = config.get("qwen_finetuning", {})
+        cloud_cfg = qf_cfg.get("cloud", {})
+        model_id = qf_cfg.get("model", "Qwen/Qwen2.5-Coder-14B-Instruct")
     repo_url = cloud_cfg.get("repo_url", "")
     repo_ref = cloud_cfg.get("repo_ref", "main")
 
@@ -225,6 +233,7 @@ def main():
         print(f"JOB_ID[{name}]={jid}")
         time.sleep(2)
 
+    ensure_cwd()
     Path("data/v7_validation").mkdir(parents=True, exist_ok=True)
     Path("data/v7_validation/job_ids.json").write_text(json.dumps(job_ids, indent=2))
     logger.info("Submitted %d job(s); ids saved to data/v7_validation/job_ids.json", len(job_ids))
@@ -247,6 +256,7 @@ def main():
             finals[name] = stage
             logger.info("  [%s] final stage: %s", name, stage)
 
+    ensure_cwd()
     Path("data/v7_validation/final_stages.json").write_text(json.dumps(finals, indent=2))
 
     failed = [n for n, s in finals.items() if s != "COMPLETED"]

@@ -85,6 +85,7 @@ orchestrator:
     base_model: "Qwen/Qwen3-14B"
     corpus_dirs:
       - data/offensive-security/repositories
+    corpus_dataset: ${HF_USERNAME}/dapt-offsec-corpus
     max_seq_length: 2048
     lora_r: 32
     lora_alpha: 64
@@ -98,7 +99,7 @@ orchestrator:
     cloud:
       hardware: "a100-large"
       wandb_project: "rtpi-swarm-v4a-max-orchestrator-dapt"
-      timeout_seconds: 10800
+      timeout_seconds: 18000
       poll_interval: 60
       image: "huggingface/transformers-pytorch-gpu:latest"
       repo_url: "https://github.com/cmndcntrlcyber/code-trainer-pipeline.git"
@@ -157,9 +158,10 @@ orchestrator:
       preference_dataset: ${HF_USERNAME}/code-trainer-v11-dpo-orchestrator
       beta: 0.1
       learning_rate: 1e-6
-      max_length: 4096
+      max_length: 2048
       max_pairs: 1500
       output_adapter: ${HF_USERNAME}/qwen3-14b-orchestrator-dpo
+      ref_model_strategy: peft_implicit
       include_persona_pairs: true
       persona_pairs_path: data/identity_examples/nexus_identity.jsonl
 
@@ -174,7 +176,7 @@ orchestrator:
     context_length: 12288
     port: 8080
     gguf_repo: ${HF_USERNAME}/qwen3-14b-orchestrator-gguf
-    source_adapter: ${HF_USERNAME}/qwen3-14b-orchestrator-dpo
+    source_adapter: ${HF_USERNAME}/qwen3-14b-orchestrator-farca
     adapter_chain:
       - ${HF_USERNAME}/qwen3-14b-dapt-offsec
       - ${HF_USERNAME}/qwen3-14b-orchestrator-sft
@@ -182,7 +184,7 @@ orchestrator:
 
   abliteration:
     base_model: "Qwen/Qwen3-14B"
-    source_adapter: ${HF_USERNAME}/qwen3-14b-orchestrator-dpo
+    source_adapter: ${HF_USERNAME}/qwen3-14b-orchestrator-farca
     adapter_chain:
       - ${HF_USERNAME}/qwen3-14b-dapt-offsec
       - ${HF_USERNAME}/qwen3-14b-orchestrator-sft
@@ -238,6 +240,7 @@ worker:
     base_model: "Qwen/Qwen3-8B"
     corpus_dirs:
       - data/offensive-security/repositories
+    corpus_dataset: ${HF_USERNAME}/dapt-offsec-corpus
     max_seq_length: 2048
     lora_r: 32
     lora_alpha: 64
@@ -319,9 +322,8 @@ worker:
     context_length: 4096
     port: 8084
     gguf_repo: ${HF_USERNAME}/qwen3-8b-worker-gguf
-    source_adapter: ${HF_USERNAME}/qwen3-8b-worker-dpo
+    source_adapter: ${HF_USERNAME}/qwen3-8b-worker-farca
     adapter_chain:
-      - ${HF_USERNAME}/qwen3-8b-dapt-offsec
       - ${HF_USERNAME}/qwen3-8b-worker-sft
     base_model: "Qwen/Qwen3-8B"
 
@@ -337,19 +339,20 @@ worker:
       - "Q4_K_M"
 
 # ═══════════════════════════════════════════════════════════════════
-# EXPLORE — google/gemma-4-4b-it on RTX 3060 (6 GB)
+# EXPLORE — google/gemma-3-4b-it on RTX 3060 (6 GB)
 # Budget: $10.88 (3.4h)
 # Phase chain: DAPT → SFT → validation → GRPO → DPO →
 #              validation → GGUF
 # ═══════════════════════════════════════════════════════════════════
 explore:
   role: "explore"
-  base_model: "google/gemma-4-4b-it"
+  base_model: "google/gemma-3-4b-it"
 
   dapt:
-    base_model: "google/gemma-4-4b-it"
+    base_model: "google/gemma-3-4b-it"
     corpus_dirs:
       - data/offensive-security/repositories
+    corpus_dataset: ${HF_USERNAME}/dapt-offsec-corpus
     max_seq_length: 2048
     lora_r: 32
     lora_alpha: 64
@@ -392,7 +395,7 @@ explore:
     grpo:
       base_adapter: ${HF_USERNAME}/gemma4-4b-explore-sft
       dapt_adapter: ${HF_USERNAME}/gemma4-4b-dapt-classify
-      base_model: "google/gemma-4-4b-it"
+      base_model: "google/gemma-3-4b-it"
       prompt_dataset: ${HF_USERNAME}/code-trainer-v11-grpo-explore
       num_generations: 4
       learning_rate: 2.5e-7
@@ -404,7 +407,7 @@ explore:
 
     dpo:
       base_adapter: ${HF_USERNAME}/gemma4-4b-explore-grpo
-      base_model: "google/gemma-4-4b-it"
+      base_model: "google/gemma-3-4b-it"
       preference_dataset: ${HF_USERNAME}/code-trainer-v11-dpo-explore
       beta: 0.1
       learning_rate: 5e-7
@@ -425,7 +428,7 @@ explore:
     adapter_chain:
       - ${HF_USERNAME}/gemma4-4b-dapt-classify
       - ${HF_USERNAME}/gemma4-4b-explore-sft
-    base_model: "google/gemma-4-4b-it"
+    base_model: "google/gemma-3-4b-it"
 
   cloud:
     hardware: "a100-large"

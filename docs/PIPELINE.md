@@ -102,7 +102,7 @@ Dataset composition:
 | A | cmndcntrlcyber/code-trainer-offsec-dataset | ~8K | Offsec code generation |
 | B | glaiveai/glaive-function-calling-v2 | ~19K | Tool-calling patterns |
 | B+ | Synthetic / R2 sessions | ~2K | Multi-tool-call sequences |
-| C | greghavens/fable-5-coding-and-debugging-traces | ~10K | Agentic traces |
+| C | greghavens/kimi-k3-coding-and-debugging-traces | ~10K | Agentic traces |
 | D | teknium/OpenHermes-2.5 | ~8K | English instruction following |
 | **E** | **Synthetic identity** | **~400** | **Nexus persona Q&A** |
 

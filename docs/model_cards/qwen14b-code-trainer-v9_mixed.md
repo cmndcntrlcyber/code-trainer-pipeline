@@ -59,7 +59,7 @@ Part of the Code-Trainer / RTPI pipeline
 | A — Code generation | `cmndcntrlcyber/code-trainer-offsec-dataset` (8K subsample) | 7,074 | Preserve code-gen quality |
 | B — Tool calling | `glaiveai/glaive-function-calling-v2` (19K cap) | ~15,125 | High-density tool calling |
 | B+ — Multi-tool synthetic | Synthetic from Slice B pairs (~2K) | ~2,000 | Multi-call per turn |
-| C — Agentic multi-turn | `greghavens/fable-5-coding-and-debugging-traces` (10K cap) | 8,994 | Multi-step agent behaviour |
+| C — Agentic multi-turn | `greghavens/kimi-k3-coding-and-debugging-traces` (10K cap) | 8,994 | Multi-step agent behaviour |
 | D — English instruction | `teknium/OpenHermes-2.5` (8K cap) | 7,208 | Language anchor |
 
 * **Tool coverage:** 25,964 / 40,401 train rows (64.3%) contain tool definitions

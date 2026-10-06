@@ -26,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -59,11 +59,13 @@ def _extract_v9_training_prompts(config: dict, max_rows: int = 5000) -> list[dic
     from datasets import load_dataset
 
     v9_cfg = config.get("v9_mixed", {})
-    dataset_id = v9_cfg.get("dataset_name", "cmndcntrlcyber/code-trainer-v9-mixed")
+    hf_user = os.environ.get("HF_USERNAME", "atlas-institute")
+    dataset_id = v9_cfg.get("dataset_name", f"{hf_user}/code-trainer-v9-mixed")
 
     logger.info("Loading V9 dataset: %s", dataset_id)
     try:
-        ds = load_dataset(dataset_id, split="train")
+        cache = os.environ.get("HF_DATASETS_CACHE", str(Path.home() / ".cache" / "huggingface" / "datasets"))
+        ds = load_dataset(dataset_id, split="train", cache_dir=cache)
     except Exception as e:
         logger.warning("Could not load V9 dataset: %s", e)
         return []
@@ -334,6 +336,52 @@ def _generate_role_prompts(role: str) -> list[dict]:
                 "prompt": p,
                 "source": f"role_{role}",
             })
+    elif role == "triage":
+        routing_prompts = [
+            "Scan 10.10.10.5 for open ports.",
+            "What is SQL injection?",
+            "Run nmap against the target network.",
+            "Explain how buffer overflows work.",
+            "Check if port 443 is open on target.htb.",
+            "Who are you?",
+            "Enumerate subdomains of example.com.",
+            "What tools are available for web application testing?",
+            "Read /etc/passwd on the target machine.",
+            "Describe the MITRE ATT&CK framework.",
+            "Find SUID binaries on the system.",
+            "What is your purpose?",
+            "Run gobuster against the web server.",
+            "How do you approach a penetration test?",
+            "Check the network 192.168.1.0/24 for live hosts.",
+            "What is the difference between a vulnerability scan and a penetration test?",
+            "Extract credentials from the config files.",
+            "Coordinate recon and exploitation of the target.",
+            "Parse this nmap output and list open ports.",
+            "What programming languages do you know?",
+        ]
+        for p in routing_prompts:
+            prompts.append({
+                "prompt": p,
+                "source": f"role_{role}",
+            })
+    elif role == "explore":
+        classification_prompts = [
+            "Classify this network traffic as normal or suspicious.",
+            "Categorize this CVE by severity and attack vector.",
+            "Is this HTTP request a potential SQL injection attempt?",
+            "Determine if this binary is packed or obfuscated.",
+            "Classify the privilege escalation vector: SUID, cron, or kernel.",
+            "Is this IP address in scope for the engagement?",
+            "Categorize these open ports by service type.",
+            "Determine if this web response indicates a vulnerability.",
+            "Classify this log entry as benign, suspicious, or malicious.",
+            "Is this file a webshell? Analyze its contents.",
+        ]
+        for p in classification_prompts:
+            prompts.append({
+                "prompt": p,
+                "source": f"role_{role}",
+            })
     logger.info("Generated %d %s role prompts", len(prompts), role)
     return prompts
 
@@ -348,7 +396,7 @@ def main():
     parser.add_argument("--push-to-hub", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--role", default=None,
-                        choices=["orchestrator", "worker"],
+                        choices=["orchestrator", "worker", "explore", "triage"],
                         help="Swarm role — adds role-specific prompts")
     parser.add_argument("--include-tool-selection-exercises", action="store_true",
                         help="Add 150 TTCA P0 tool-selection exercise prompts")
@@ -416,15 +464,23 @@ def main():
     if args.push_to_hub:
         from datasets import load_dataset as ld
 
-        rl_cfg = config.get("rl_training", {})
-        grpo_cfg = rl_cfg.get("grpo", {})
-        ds_name = grpo_cfg.get(
-            "prompt_dataset",
-            f"{os.environ.get('HF_USERNAME', 'cmndcntrlcyber')}/code-trainer-v10-grpo-prompts",
-        )
+        ds_name = None
+        if args.role:
+            role_cfg = config.get(args.role, {})
+            rl_cfg = role_cfg.get("rl", {})
+            ds_name = rl_cfg.get("farca_grpo", rl_cfg.get("grpo", {})).get("prompt_dataset")
+        if not ds_name:
+            rl_cfg = config.get("rl_training", {})
+            grpo_cfg = rl_cfg.get("grpo", {})
+            ds_name = grpo_cfg.get(
+                "prompt_dataset",
+                f"{os.environ.get('HF_USERNAME', 'atlas-institute')}/code-trainer-v10-grpo-prompts",
+            )
 
         logger.info("Pushing to Hub: %s", ds_name)
-        ds = ld("json", data_files={"train": str(out_path)})
+        ensure_cwd()
+        cache = os.environ.get("HF_DATASETS_CACHE", str(Path.home() / ".cache" / "huggingface" / "datasets"))
+        ds = ld("json", data_files={"train": str(out_path)}, cache_dir=cache)
         token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
         ds.push_to_hub(ds_name, token=token, private=False)
         logger.info("Pushed: https://huggingface.co/datasets/%s", ds_name)

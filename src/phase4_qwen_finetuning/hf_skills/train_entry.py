@@ -38,10 +38,24 @@ logger = logging.getLogger(__name__)
 os.environ.setdefault("HF_HOME", "/workspace/.hf-cache")
 
 
+def _merge_consecutive_roles(messages):
+    """Merge consecutive messages with the same role for chat templates that require alternation."""
+    if not messages:
+        return messages
+    merged = [dict(messages[0])]
+    for msg in messages[1:]:
+        if msg["role"] == merged[-1]["role"]:
+            merged[-1]["content"] = merged[-1]["content"] + "\n" + msg.get("content", "")
+        else:
+            merged.append(dict(msg))
+    return merged
+
+
 def _format_chat(example, tokenizer, max_length=4096):
     """Render the Phase 2 messages list into a single chat-templated string, truncated."""
+    messages = _merge_consecutive_roles(example["messages"])
     text = tokenizer.apply_chat_template(
-        example["messages"],
+        messages,
         tokenize=False,
         add_generation_prompt=False,
     )

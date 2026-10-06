@@ -53,7 +53,7 @@ mixed dataset.
 |---|---|---|---|
 | A — Code generation | `cmndcntrlcyber/code-trainer-offsec-dataset` (8K subsample) | 7,191 | Preserve V6 code-gen quality |
 | B — Tool/function calling | `NousResearch/hermes-function-calling-v1` (5 configs) | 10,381 | Restore `<tool_call>` emission |
-| C — Agentic multi-turn | `greghavens/fable-5-coding-and-debugging-traces` | 11,290 | Teach multi-step agent behaviour |
+| C — Agentic multi-turn | `greghavens/kimi-k3-coding-and-debugging-traces` | 11,290 | Teach multi-step agent behaviour |
 
 * **Tool coverage:** 18,413 / 28,862 train rows (63.8%) contain tool definitions
 * **Format:** Unified ChatML with Hermes-style `<tool_call>` XML tags, compatible

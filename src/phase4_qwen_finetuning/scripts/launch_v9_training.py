@@ -29,7 +29,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 from src.phase4_qwen_finetuning.configs.sweep_configs import SWEEP_CONFIG_MAP
 from src.phase3_vision_model.hf_skills import (
     VisionJobSpec as JobSpec,
@@ -77,7 +77,7 @@ def main():
         raise SystemExit(f"Unknown config: {args.only}. Available: {list(SWEEP_CONFIG_MAP.keys())}")
 
     cfg = SWEEP_CONFIG_MAP[args.only]
-    hf_username = os.environ.get("HF_USERNAME", "cmndcntrlcyber")
+    hf_username = os.environ.get("HF_USERNAME", "atlas-institute")
     adapter_repo = f"{hf_username}/qwen14b-code-trainer-{cfg.name}"
 
     params = {
@@ -149,6 +149,7 @@ def main():
     job_id = submit_job(spec, token=hf_token)
     print(f"JOB_ID={job_id}")
 
+    ensure_cwd()
     Path("data/v9_validation").mkdir(parents=True, exist_ok=True)
     Path("data/v9_validation/job_ids.json").write_text(
         json.dumps({cfg.name: job_id}, indent=2)

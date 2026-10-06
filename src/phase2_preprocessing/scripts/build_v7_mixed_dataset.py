@@ -5,7 +5,7 @@ Build the V7 mixed training dataset from 3 HuggingFace Hub sources:
 
   Slice A: Code generation     (~8K from cmndcntrlcyber/code-trainer-offsec-dataset)
   Slice B: Tool/function calling (11.6K from NousResearch/hermes-function-calling-v1)
-  Slice C: Agentic multi-turn   (12.5K from greghavens/fable-5-coding-and-debugging-traces)
+  Slice C: Agentic multi-turn   (12.5K from greghavens/kimi-k3-coding-and-debugging-traces)
 
 Produces a unified ChatML-compatible dataset pushed to HuggingFace Hub
 as cmndcntrlcyber/code-trainer-v7-mixed.
@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from datasets import Dataset, DatasetDict, concatenate_datasets, load_dataset
 
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 from src.phase2_preprocessing.converters.tool_format_converter import (
     convert_fable5_messages_to_hermes,
     convert_hermes_conversations_to_messages,
@@ -137,7 +137,7 @@ def load_slice_b(
 
 
 def load_slice_c(
-    dataset_id: str = "greghavens/fable-5-coding-and-debugging-traces",
+    dataset_id: str = "greghavens/kimi-k3-coding-and-debugging-traces",
 ) -> list[dict]:
     """Load the Fable 5 coding agent traces (Slice C)."""
     logger.info("Loading Slice C: %s", dataset_id)
@@ -236,7 +236,7 @@ def main():
 
     slice_a_source = v7_cfg.get("slice_a", {}).get("source", "cmndcntrlcyber/code-trainer-offsec-dataset")
     slice_b_source = v7_cfg.get("slice_b", {}).get("source", "NousResearch/hermes-function-calling-v1")
-    slice_c_source = v7_cfg.get("slice_c", {}).get("source", "greghavens/fable-5-coding-and-debugging-traces")
+    slice_c_source = v7_cfg.get("slice_c", {}).get("source", "greghavens/kimi-k3-coding-and-debugging-traces")
     hub_repo = args.hub_repo or v7_cfg.get("dataset_name", "cmndcntrlcyber/code-trainer-v7-mixed")
     val_ratio = float(v7_cfg.get("val_split", 0.1))
 
@@ -269,6 +269,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Saving dataset to %s", output_dir)
+    ensure_cwd()
     dataset_dict.save_to_disk(str(output_dir))
 
     stats_path = output_dir / "statistics.json"

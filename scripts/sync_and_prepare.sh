@@ -150,9 +150,9 @@ log() {
 }
 
 # Count total steps
-TOTAL_STEPS=4
+TOTAL_STEPS=5
 if $REFRESH_CORPUS; then
-    TOTAL_STEPS=6
+    TOTAL_STEPS=7
 fi
 
 log "=========================================="
@@ -182,6 +182,8 @@ if $DRY_RUN; then
     log "[DRY RUN] Step $STEP/$TOTAL_STEPS: Build GRPO prompts (build_grpo_prompts.py)"
     ((STEP++))
     log "[DRY RUN] Step $STEP/$TOTAL_STEPS: Pre-compute FARCA annotations (precompute_farca_annotations.py)"
+    ((STEP++))
+    log "[DRY RUN] Step $STEP/$TOTAL_STEPS: Generate synthetic DPO negatives (collect_negatives.py --synthetic)"
     if $PUSH_TO_HUB; then
         log "[DRY RUN]   + Push datasets to HuggingFace Hub"
     fi
@@ -350,6 +352,26 @@ if [[ -f "data/oco_converted/train.jsonl" ]]; then
     fi
 else
     log "  WARNING: data/oco_converted/train.jsonl not found, skipping FARCA precompute"
+fi
+
+# ─── Step: Generate synthetic negatives for DPO ────────────────────
+((STEP++))
+log "Step $STEP/$TOTAL_STEPS: Generating synthetic DPO negatives..."
+if [[ -f "data/oco_converted/train.jsonl" ]]; then
+    uv run python -m src.phase4c_rl.data.collect_negatives \
+        --synthetic \
+        --input data/oco_converted/train.jsonl \
+        --output-dir data/rl_negatives \
+        >> "$RUN_LOG" 2>&1 || {
+        log "  WARNING: Synthetic negative generation failed (non-fatal)"
+    }
+
+    if [[ -f "data/rl_negatives/negatives.json" ]]; then
+        NEG_COUNT=$(python3 -c "import json; print(len(json.load(open('data/rl_negatives/negatives.json'))))" 2>/dev/null || echo "?")
+        log "  Generated $NEG_COUNT synthetic negatives"
+    fi
+else
+    log "  WARNING: data/oco_converted/train.jsonl not found, skipping negatives"
 fi
 
 # ═══════════════════════════════════════════════════════════════════

@@ -14,7 +14,7 @@ Four slices + synthetic multi-call:
   A: Code generation     (~8K  from cmndcntrlcyber/code-trainer-offsec-dataset)
   B: Tool calling         (~19K from glaiveai/glaive-function-calling-v2, native format)
   B+: Multi-tool-call     (~2K  synthetic from Slice B pairs)
-  C: Agent traces         (~10K from greghavens/fable-5-coding-and-debugging-traces)
+  C: Agent traces         (~10K from greghavens/kimi-k3-coding-and-debugging-traces)
   D: English instruction  (~8K  from teknium/OpenHermes-2.5)
 
 Usage:
@@ -38,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from datasets import Dataset, DatasetDict, load_dataset
 
 from src.config.nexus_identity import NEXUS_IDENTITY, build_nexus_system_prompt
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 from src.phase2_preprocessing.converters.tool_format_converter import (
     convert_fable5_messages_to_hermes,
     detect_tools_in_messages,
@@ -492,7 +492,7 @@ def synthesize_multi_tool_calls(
 
 
 def load_slice_c(
-    dataset_id: str = "greghavens/fable-5-coding-and-debugging-traces",
+    dataset_id: str = "greghavens/kimi-k3-coding-and-debugging-traces",
     max_rows: int = 10000,
     seed: int = 42,
 ) -> list[dict]:
@@ -851,7 +851,7 @@ def main():
         records_b_multi = synthesize_multi_tool_calls(records_b, multi_target, args.seed)
 
     records_c = load_slice_c(
-        v9_cfg.get("slice_c", {}).get("source", "greghavens/fable-5-coding-and-debugging-traces"),
+        v9_cfg.get("slice_c", {}).get("source", "greghavens/kimi-k3-coding-and-debugging-traces"),
         args.slice_c_size, args.seed,
     )
     records_d = load_slice_d(
@@ -896,6 +896,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Saving to %s", output_dir)
+    ensure_cwd()
     dataset_dict.save_to_disk(str(output_dir))
 
     stats_path = output_dir / "statistics.json"

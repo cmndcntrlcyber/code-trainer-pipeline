@@ -13,7 +13,7 @@ Key changes from V7:
 Four slices:
   A: Code generation     (~8K  from cmndcntrlcyber/code-trainer-offsec-dataset)
   B: Tool calling         (~12K from glaiveai/glaive-function-calling-v2, native format)
-  C: Agent traces         (~10K from greghavens/fable-5-coding-and-debugging-traces)
+  C: Agent traces         (~10K from greghavens/kimi-k3-coding-and-debugging-traces)
   D: English instruction  (~8K  from teknium/OpenHermes-2.5)
 
 Usage:
@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from datasets import Dataset, DatasetDict, load_dataset
 
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 from src.phase2_preprocessing.converters.tool_format_converter import (
     convert_fable5_messages_to_hermes,
     detect_tools_in_messages,
@@ -298,7 +298,7 @@ def load_slice_b(
 
 
 def load_slice_c(
-    dataset_id: str = "greghavens/fable-5-coding-and-debugging-traces",
+    dataset_id: str = "greghavens/kimi-k3-coding-and-debugging-traces",
     max_rows: int = 10000,
     seed: int = 42,
 ) -> list[dict]:
@@ -505,7 +505,7 @@ def main():
         args.slice_b_size, args.seed,
     )
     records_c = load_slice_c(
-        v8_cfg.get("slice_c", {}).get("source", "greghavens/fable-5-coding-and-debugging-traces"),
+        v8_cfg.get("slice_c", {}).get("source", "greghavens/kimi-k3-coding-and-debugging-traces"),
         args.slice_c_size, args.seed,
     )
     records_d = load_slice_d(
@@ -528,6 +528,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Saving to %s", output_dir)
+    ensure_cwd()
     dataset_dict.save_to_disk(str(output_dir))
 
     stats_path = output_dir / "statistics.json"

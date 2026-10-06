@@ -87,7 +87,7 @@ v7_mixed:
       - json_mode_agentic
       - json_mode_singleturn
   slice_c:
-    source: greghavens/fable-5-coding-and-debugging-traces
+    source: greghavens/kimi-k3-coding-and-debugging-traces
   val_split: 0.1
   seed: 42
   private: false
@@ -102,7 +102,7 @@ v8_mixed:
     source: glaiveai/glaive-function-calling-v2
     max_rows: 12000
   slice_c:
-    source: greghavens/fable-5-coding-and-debugging-traces
+    source: greghavens/kimi-k3-coding-and-debugging-traces
     max_rows: 10000
   slice_d:
     source: teknium/OpenHermes-2.5
@@ -123,7 +123,7 @@ v9_mixed:
   slice_b_multi:
     synthetic_count: 2000
   slice_c:
-    source: greghavens/fable-5-coding-and-debugging-traces
+    source: greghavens/kimi-k3-coding-and-debugging-traces
     max_rows: 10000
   slice_d:
     source: teknium/OpenHermes-2.5

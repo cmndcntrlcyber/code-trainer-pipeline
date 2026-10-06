@@ -255,7 +255,7 @@ def main():
         "learning_rate": lr,
         "beta": beta,
         "num_generations": num_generations,
-        "max_new_tokens": max_new_tokens,
+        "max_new_tokens": max_completion_length,
         "num_epochs": num_epochs,
         "batch_size": batch_size,
         "gradient_accumulation": gradient_accumulation,

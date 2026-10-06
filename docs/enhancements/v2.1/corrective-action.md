@@ -41,7 +41,7 @@ The V7 dataset must blend three capabilities so none overwrites the others:
 - **CRITICAL:** This dataset is what NousResearch used to train Hermes 2 Pro. It's the canonical source for the `<tool_call>` format that Qwen2.5's chat template expects.
 
 #### Slice C: Agentic Multi-Turn Coding (teach agent behavior)
-- **Source:** `greghavens/fable-5-coding-and-debugging-traces`
+- **Source:** `greghavens/kimi-k3-coding-and-debugging-traces`
 - **Rows:** all 12.5K
 - **Format:** Messages with `tool_calls` field, `reasoning_content`, multi-turn agent traces
 - **Purpose:** Teach the model to reason step-by-step, call tools (Read, Write, Bash, Grep), interpret results, and iterate. These are real coding-agent sessions with verified outcomes.
@@ -158,7 +158,7 @@ After the corrective SFT above, these datasets could be used for GRPO/DPO/RLHF t
 | Dataset | Rows | Why | Use for |
 |---------|------|-----|---------|
 | **NousResearch/hermes-function-calling-v1** | 11.6K | The canonical tool-calling training set. Hermes `<tool_call>` format matches Qwen2.5 natively. Includes single-turn, multi-turn, agentic JSON mode. | **SFT (Phase 1, Slice B)** — not RL. This is foundational data, not reward signal. |
-| **greghavens/fable-5-coding-and-debugging-traces** | 12.5K | Verified coding-agent trajectories with structured tool_calls, reasoning_content. Multi-turn. Categories include coding, debugging, instruction-following. | **SFT (Phase 1, Slice C)** and/or **RL reward signal** — successful trajectories = positive reward. |
+| **greghavens/kimi-k3-coding-and-debugging-traces** | 12.5K | Verified coding-agent trajectories with structured tool_calls, reasoning_content. Multi-turn. Categories include coding, debugging, instruction-following. | **SFT (Phase 1, Slice C)** and/or **RL reward signal** — successful trajectories = positive reward. |
 | **Glint-Research/Fable-5-traces** | 4.7K | Pi-agent format with 3,799 tool calls across 60 source sessions. Real agent sessions, not synthetic. | **GRPO/DPO after SFT** — use successful tool-use sequences as preferred, tool-less or failed attempts as dispreferred. |
 
 ### Useful with caveats
@@ -180,7 +180,7 @@ After the corrective SFT above, these datasets could be used for GRPO/DPO/RLHF t
 Phase 1: Corrective SFT (this plan)
   ├── Slice A: code-trainer-offsec-dataset (8K subsample)
   ├── Slice B: hermes-function-calling-v1 (11.6K)
-  └── Slice C: fable-5-coding-and-debugging-traces (12.5K)
+  └── Slice C: kimi-k3-coding-and-debugging-traces (12.5K)
           ↓
 Phase 2: GRPO on tool-use trajectories
   ├── Positive reward: Fable-5-traces (successful tool calls → correct result)

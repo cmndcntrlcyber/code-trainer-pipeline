@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from datasets import Dataset, DatasetDict, load_dataset
 
 from src.config.nexus_role_identities import ROLE_IDENTITIES
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 from src.phase2_preprocessing.converters.tool_format_converter import (
     convert_fable5_messages_to_hermes,
     detect_tools_in_messages,
@@ -356,7 +356,7 @@ def load_slice_b(
 
 
 def load_slice_c(
-    dataset_id: str = "greghavens/fable-5-coding-and-debugging-traces",
+    dataset_id: str = "greghavens/kimi-k3-coding-and-debugging-traces",
     max_rows: int = 3000,
     seed: int = 42,
     short_only: bool = False,
@@ -1133,7 +1133,7 @@ def build_orchestrator(config: dict, args) -> list[dict]:
         swarm_cfg.get("slice_b_size", 6000), seed, filter_mode="multi_step",
     )
     records_c = load_slice_c(
-        swarm_cfg.get("slice_c_source", "greghavens/fable-5-coding-and-debugging-traces"),
+        swarm_cfg.get("slice_c_source", "greghavens/kimi-k3-coding-and-debugging-traces"),
         swarm_cfg.get("slice_c_size", 3000), seed,
     )
     records_d = load_slice_d(
@@ -1177,7 +1177,7 @@ def build_worker(config: dict, args) -> list[dict]:
         swarm_cfg.get("slice_b_size", 5000), seed, filter_mode="single_call",
     )
     records_c = load_slice_c(
-        swarm_cfg.get("slice_c_source", "greghavens/fable-5-coding-and-debugging-traces"),
+        swarm_cfg.get("slice_c_source", "greghavens/kimi-k3-coding-and-debugging-traces"),
         swarm_cfg.get("slice_c_size", 1000), seed, short_only=True,
     )
     records_d = load_slice_d(
@@ -1317,6 +1317,7 @@ def build_and_save_role(role: str, config: dict, args):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Saving to %s", output_dir)
+    ensure_cwd()
     dataset_dict.save_to_disk(str(output_dir))
 
     stats_path = output_dir / "statistics.json"
@@ -1331,7 +1332,7 @@ def build_and_save_role(role: str, config: dict, args):
             logger.error("HF_TOKEN not set; skipping Hub push for %s.", role)
             return
 
-        hf_username = os.environ.get("HF_USERNAME", "cmndcntrlcyber")
+        hf_username = os.environ.get("HF_USERNAME", "atlas-institute")
         hub_repo = (
             config.get("swarm_roles", {}).get(role, {}).get("hub_repo")
             or f"{hf_username}/code-trainer-v11-{role}"

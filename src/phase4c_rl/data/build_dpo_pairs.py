@@ -30,7 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,9 +43,15 @@ def _load_negatives(negatives_dir: Path) -> list[dict]:
     """Load negative examples from collect_negatives.py output."""
     neg_file = negatives_dir / "negatives.json"
     if not neg_file.exists():
-        raise FileNotFoundError(f"Negatives file not found: {neg_file}")
+        logger.warning("Negatives file not found: %s — returning empty list", neg_file)
+        return []
 
-    data = json.loads(neg_file.read_text())
+    try:
+        data = json.loads(neg_file.read_text())
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        logger.warning("Failed to parse %s: %s — returning empty list", neg_file, exc)
+        return []
+
     logger.info("Loaded %d negatives from %s", len(data), neg_file)
     return data
 
@@ -56,6 +62,10 @@ def _load_positives(positives_dir: Path) -> list[dict]:
     Looks for train.jsonl (from ingest_oco_sessions.py) or a flat JSON list.
     Positive examples must have 'messages' with at least one <tool_call>.
     """
+    if not positives_dir.exists():
+        logger.warning("Positives directory not found: %s — returning empty list", positives_dir)
+        return []
+
     positives = []
 
     # Try JSONL files first (from ingest_oco_sessions).
@@ -339,6 +349,8 @@ def main():
                         help="JSONL file of identity examples for persona DPO pairs")
     parser.add_argument("--include-conciseness-pairs", action="store_true",
                         help="Add 150-200 conciseness preference pairs (TTCA P5)")
+    parser.add_argument("--role", default=None,
+                        help="Swarm role — reads preference_dataset from <role>.rl.dpo section")
     args = parser.parse_args()
 
     import random
@@ -351,6 +363,22 @@ def main():
 
     negatives = _load_negatives(negatives_dir)
     positives = _load_positives(positives_dir)
+
+    if not negatives and positives:
+        train_jsonl = positives_dir / "train.jsonl"
+        if train_jsonl.exists():
+            logger.info(
+                "No negatives found — auto-generating synthetic negatives from %s",
+                train_jsonl,
+            )
+            from src.phase4c_rl.data.collect_negatives import _generate_synthetic
+
+            negatives_dir.mkdir(parents=True, exist_ok=True)
+            _generate_synthetic(train_jsonl, negatives_dir, seed=args.seed)
+            negatives = _load_negatives(negatives_dir)
+        else:
+            logger.warning("No negatives and no train.jsonl for synthetic generation")
+
     pairs = build_pairs(negatives, positives)
 
     # Add persona DPO pairs if identity examples provided
@@ -405,18 +433,25 @@ def main():
         from huggingface_hub import HfApi
 
         config = load_config(args.config)
-        rl_cfg = config.get("rl_training", {})
-        dpo_cfg = rl_cfg.get("dpo", {})
-        ds_name = dpo_cfg.get(
-            "preference_dataset",
-            f"{os.environ.get('HF_USERNAME', 'cmndcntrlcyber')}/code-trainer-v10-dpo-pairs",
-        )
+        ds_name = None
+        if args.role:
+            role_cfg = config.get(args.role, {})
+            ds_name = role_cfg.get("rl", {}).get("dpo", {}).get("preference_dataset")
+        if not ds_name:
+            rl_cfg = config.get("rl_training", {})
+            dpo_cfg = rl_cfg.get("dpo", {})
+            ds_name = dpo_cfg.get(
+                "preference_dataset",
+                f"{os.environ.get('HF_USERNAME', 'atlas-institute')}/code-trainer-v10-dpo-pairs",
+            )
 
         logger.info("Pushing to Hub: %s", ds_name)
+        ensure_cwd()
+        cache = os.environ.get("HF_DATASETS_CACHE", str(Path.home() / ".cache" / "huggingface" / "datasets"))
         ds = ld("json", data_files={
             "train": str(train_path),
             "validation": str(val_path),
-        })
+        }, cache_dir=cache)
         token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
         ds.push_to_hub(ds_name, token=token, private=False)
         logger.info("Pushed: https://huggingface.co/datasets/%s", ds_name)
