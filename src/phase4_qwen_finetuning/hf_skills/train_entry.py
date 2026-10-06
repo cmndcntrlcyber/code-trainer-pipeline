@@ -135,7 +135,7 @@ def main():
         logger.info(f"  validation sliced to first {n} rows (PHASE4_VAL_LIMIT)")
 
     ds = ds.map(lambda ex: _format_chat(ex, tokenizer, max_length=max_seq_length),
-                remove_columns=[c for c in ds["train"].column_names if c != "messages"])
+                remove_columns=ds["train"].column_names)
     logger.info(f"  splits: {list(ds.keys())}  train={len(ds['train'])} val={len(ds['validation'])}")
 
     # ─── 2. Base model + LoRA ──────────────────────────────────────────────
