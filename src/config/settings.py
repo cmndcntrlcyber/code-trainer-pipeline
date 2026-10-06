@@ -10,6 +10,21 @@ from typing import Any, Dict
 
 import yaml
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def ensure_cwd() -> None:
+    """Re-anchor CWD to PROJECT_ROOT if the current directory is stale.
+
+    The /mnt/ssd mount can remount during long operations, leaving
+    os.getcwd() pointing at a deleted inode.  Libraries like `datasets`
+    call Path().resolve() internally, which crashes in that state.
+    """
+    try:
+        os.getcwd()
+    except (FileNotFoundError, OSError):
+        os.chdir(PROJECT_ROOT)
+
 
 def _substitute_env_vars(value: Any) -> Any:
     """Recursively substitute ${VAR} patterns with environment variables."""

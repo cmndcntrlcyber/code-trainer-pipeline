@@ -24,9 +24,10 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -170,7 +171,8 @@ def main():
     # 3. Optionally push to Hub (merge with code corpus externally)
     if args.push_to_hub:
         from datasets import Dataset
-        abs_path = str(chunks_path.absolute()) if not str(chunks_path).startswith("/") else str(chunks_path)
+        abs_path = str(PROJECT_ROOT / chunks_path) if not chunks_path.is_absolute() else str(chunks_path)
+        ensure_cwd()
         ds = Dataset.from_json(abs_path)
         hub_name = dapt_cfg.get("output_adapter", "").replace("-adapter", "") + "-pdf-corpus"
         if not hub_name or hub_name == "-pdf-corpus":

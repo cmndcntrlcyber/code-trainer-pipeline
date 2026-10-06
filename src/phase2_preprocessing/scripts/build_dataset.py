@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from datasets import Dataset, DatasetDict
 
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 from src.phase2_preprocessing.converters.hf_dataset_converter import (
     convert_captures_to_records,
     convert_pdf_captures_to_records,
@@ -248,6 +248,7 @@ def main():
 
     # Step 6: Save to disk
     output_dir.mkdir(parents=True, exist_ok=True)
+    ensure_cwd()
     dataset_dict.save_to_disk(str(output_dir))
     logger.info(f"Dataset saved to {output_dir}")
 

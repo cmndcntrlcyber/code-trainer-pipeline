@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from datasets import load_from_disk
 from huggingface_hub import HfApi, create_branch
 
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -97,6 +97,7 @@ def main():
     push_kwargs = dict(private=private, commit_message=commit_message)
     if revision:
         push_kwargs["revision"] = revision
+    ensure_cwd()
     dataset.push_to_hub(dataset_name, **push_kwargs)
 
     branch_suffix = f"/tree/{revision}" if revision else ""

@@ -32,7 +32,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 from src.phase4_qwen_finetuning.configs.sweep_configs import SWEEP_CONFIG_MAP, SWEEP_CONFIGS
 from src.phase3_vision_model.hf_skills import (
     VisionJobSpec as JobSpec,
@@ -137,6 +137,80 @@ def build_job_spec(
     )
 
 
+def build_role_job_spec(
+    role: str,
+    sft_cfg: dict,
+    cloud_cfg: dict,
+    hf_token: str,
+    wandb_key: str | None,
+    train_limit: int | None = None,
+    val_limit: int | None = None,
+) -> JobSpec:
+    """Build a job spec directly from the role's SFT config (no sweep config needed)."""
+    adapter_repo = sft_cfg.get("output_adapter", "")
+    if not adapter_repo:
+        raise SystemExit(f"Role {role!r} missing sft.output_adapter in config")
+
+    base_model = sft_cfg.get("base_model", cloud_cfg.get("base_model", "Qwen/Qwen2.5-Coder-14B-Instruct"))
+    num_epochs = int(sft_cfg.get("num_epochs", 2))
+
+    params = {
+        "name": role,
+        "lora_r": int(sft_cfg.get("lora_r", 32)),
+        "lora_alpha": int(sft_cfg.get("lora_alpha", 64)),
+        "lora_dropout": float(sft_cfg.get("lora_dropout", 0.05)),
+        "learning_rate": float(sft_cfg.get("learning_rate", 1e-4)),
+        "batch_size": int(sft_cfg.get("batch_size", 1)),
+        "gradient_accumulation": int(sft_cfg.get("gradient_accumulation", 16)),
+        "model_id": base_model,
+        "dataset_id": sft_cfg.get("dataset_id", ""),
+        "dataset_revision": sft_cfg.get("dataset_revision", "main"),
+        "num_epochs": num_epochs,
+        "max_seq_length": int(sft_cfg.get("max_seq_length", 4096)),
+        "adapter_repo": adapter_repo,
+        "output_dir": f"/tmp/phase4-{role}",
+    }
+    if sft_cfg.get("dapt_adapter"):
+        params["dapt_adapter"] = sft_cfg["dapt_adapter"]
+    tl = train_limit or sft_cfg.get("train_limit")
+    if tl is not None:
+        params["train_limit"] = int(tl)
+    vl = val_limit or sft_cfg.get("val_limit")
+    if vl is not None:
+        params["val_limit"] = int(vl)
+
+    env = {
+        "PHASE4_PARAMS_JSON": json.dumps(params),
+        "PHASE4_ADAPTER_REPO": adapter_repo,
+        "WANDB_PROJECT": cloud_cfg.get("wandb_project", f"rtpi-swarm-{role}"),
+        "REPO_URL": cloud_cfg.get("repo_url", ""),
+        "REPO_REF": cloud_cfg.get("repo_ref", "main"),
+    }
+    if tl is not None:
+        env["PHASE4_TRAIN_LIMIT"] = str(int(tl))
+    wandb_mode = os.environ.get("WANDB_MODE")
+    if wandb_mode:
+        env["WANDB_MODE"] = wandb_mode
+    elif not wandb_key:
+        env["WANDB_MODE"] = "offline"
+
+    secrets = {"HF_TOKEN": hf_token}
+    if wandb_key:
+        secrets["WANDB_API_KEY"] = wandb_key
+
+    full_timeout = int(cloud_cfg.get("timeout_seconds", 43200))
+
+    return JobSpec(
+        image=cloud_cfg.get("image", "huggingface/transformers-pytorch-gpu:latest"),
+        command=build_job_command(cloud_cfg.get("repo_url", ""), cloud_cfg.get("repo_ref", "main")),
+        flavor=cloud_cfg.get("hardware", "a100-large"),
+        env=env,
+        secrets=secrets,
+        timeout_seconds=full_timeout,
+        labels={"phase": "4-SFT", "project": "rtpi", "role": role},
+    )
+
+
 def _print_spec(name: str, spec: JobSpec):
     s = asdict(spec)
     s["secrets"] = {k: "<redacted>" for k in spec.secrets}
@@ -166,7 +240,7 @@ def main():
     parser.add_argument("--config", default="src/config/config.yaml")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--wait", action="store_true")
-    grp = parser.add_mutually_exclusive_group(required=True)
+    grp = parser.add_mutually_exclusive_group(required=False)
     grp.add_argument("--best-config", default=None,
                      choices=[c.name for c in SWEEP_CONFIGS],
                      help="Single config to run for full training")
@@ -180,35 +254,58 @@ def main():
                              "8000 rows × 3 epochs ≈ 3.5h. 12000 rows × 3 epochs ≈ 5h.")
     parser.add_argument("--val-limit", type=int, default=None,
                         help="Cap validation rows (default: full ~3265 rows).")
+    parser.add_argument("--role", default=None,
+                        help="Swarm role — reads SFT config from <role>.sft section")
     args = parser.parse_args()
 
     config = load_config(args.config)
-    qf_cfg = config.get("qwen_finetuning", {})
-    cloud_cfg = qf_cfg.get("cloud", {})
-    full_cfg = qf_cfg.get("full_training", {})
-    num_epochs = int(full_cfg.get("num_epochs", 3))
-
-    config_names = (
-        [args.best_config]
-        if args.best_config
-        else _resolve_top_n(args.top_n)
-    )
-
-    suffix = args.suffix if args.suffix != "fullN" else f"full{num_epochs}"
 
     hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN") or ""
     wandb_key = os.environ.get("WANDB_API_KEY")
     if not args.dry_run and not hf_token:
         raise SystemExit("HF_TOKEN env var required to submit an HF Job")
 
-    specs = {
-        name: build_job_spec(
-            name, qf_cfg, cloud_cfg, hf_token, wandb_key,
-            num_epochs=num_epochs, suffix=suffix,
+    if args.role and not args.best_config and args.top_n is None:
+        role_cfg = config.get(args.role, {})
+        sft_cfg = role_cfg.get("sft", {})
+        sft_cfg["base_model"] = role_cfg.get("base_model", sft_cfg.get("base_model", ""))
+        cloud_cfg = role_cfg.get("cloud", {})
+        spec = build_role_job_spec(
+            args.role, sft_cfg, cloud_cfg, hf_token, wandb_key,
             train_limit=args.train_limit, val_limit=args.val_limit,
         )
-        for name in config_names
-    }
+        specs = {args.role: spec}
+    else:
+        if not args.best_config and args.top_n is None:
+            raise SystemExit("One of --best-config, --top-n, or --role is required")
+        if args.role:
+            role_cfg = config.get(args.role, {})
+            qf_cfg = {"cloud": role_cfg.get("cloud", {}), "full_training": role_cfg.get("sft", {}),
+                       "validation_sweep": [role_cfg.get("sft", {})],
+                       "output_base": role_cfg.get("sft", {}).get("output_adapter", ""),
+                       **role_cfg.get("sft", {})}
+        else:
+            qf_cfg = config.get("qwen_finetuning", {})
+        cloud_cfg = qf_cfg.get("cloud", {})
+        full_cfg = qf_cfg.get("full_training", {})
+        num_epochs = int(full_cfg.get("num_epochs", 3))
+
+        config_names = (
+            [args.best_config]
+            if args.best_config
+            else _resolve_top_n(args.top_n)
+        )
+
+        suffix = args.suffix if args.suffix != "fullN" else f"full{num_epochs}"
+
+        specs = {
+            name: build_job_spec(
+                name, qf_cfg, cloud_cfg, hf_token, wandb_key,
+                num_epochs=num_epochs, suffix=suffix,
+                train_limit=args.train_limit, val_limit=args.val_limit,
+            )
+            for name in config_names
+        }
 
     for name, spec in specs.items():
         _print_spec(name, spec)
@@ -224,6 +321,7 @@ def main():
         print(f"JOB_ID[{name}]={jid}")
         time.sleep(2)
 
+    ensure_cwd()
     Path("data/sweep_results").mkdir(parents=True, exist_ok=True)
     Path("data/sweep_results/full_training_job_ids.json").write_text(
         json.dumps(job_ids, indent=2)

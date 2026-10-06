@@ -24,12 +24,13 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from datasets import Dataset
 from transformers import AutoTokenizer
 
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -116,10 +117,16 @@ def main():
     parser.add_argument("--config", default="src/config/config.yaml")
     parser.add_argument("--output-dir", default="data/dapt_corpus")
     parser.add_argument("--push-to-hub", action="store_true")
+    parser.add_argument("--role", default=None,
+                        help="Swarm role — reads DAPT config from <role>.dapt section")
     args = parser.parse_args()
 
     config = load_config(args.config)
-    dapt_cfg = config.get("dapt", {})
+    if args.role:
+        role_cfg = config.get(args.role, {})
+        dapt_cfg = role_cfg.get("dapt", {})
+    else:
+        dapt_cfg = config.get("dapt", {})
 
     min_lines = int(dapt_cfg.get("min_lines", 10))
     max_lines = int(dapt_cfg.get("max_lines", 1000))
@@ -127,11 +134,16 @@ def main():
     max_documents = int(dapt_cfg.get("max_documents", 0))
     base_model = dapt_cfg.get("base_model", "Qwen/Qwen2.5-Coder-14B-Instruct")
 
-    corpus_dir = Path("data/offensive-security/repositories")
+    corpus_dirs = dapt_cfg.get("corpus_dirs", ["data/offensive-security/repositories"])
+    corpus_dir = Path(corpus_dirs[0])
+    if not corpus_dir.is_absolute():
+        corpus_dir = PROJECT_ROOT / corpus_dir
     if not corpus_dir.exists():
         raise FileNotFoundError(f"Corpus directory not found: {corpus_dir}")
 
     output_dir = Path(args.output_dir)
+    if not output_dir.is_absolute():
+        output_dir = PROJECT_ROOT / output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Collect qualifying files
@@ -181,18 +193,23 @@ def main():
     logger.info("Total documents (chunks): %d", total_chunks)
 
     # 5. Build HuggingFace dataset from JSONL (memory-efficient).
-    # Pass an absolute path via data_files= to avoid Dataset.from_json
-    # calling Path().resolve() internally, which fails on some mounts.
-    abs_chunks = str(Path(chunks_path).absolute())
-    ds = Dataset.from_json(data_files=abs_chunks)
-    abs_output = str(Path(output_dir).absolute())
+    # Re-anchor CWD to PROJECT_ROOT — the /mnt/ssd mount can remount
+    # mid-execution, and Dataset.from_json internally calls Path().resolve()
+    # which fails if the original CWD is stale.
+    abs_chunks = str(PROJECT_ROOT / chunks_path) if not chunks_path.is_absolute() else str(chunks_path)
+    ensure_cwd()
+    ds = Dataset.from_json(abs_chunks)
+    abs_output = str(PROJECT_ROOT / output_dir) if not output_dir.is_absolute() else str(output_dir)
     ds.save_to_disk(abs_output)
     chunks_path.unlink(missing_ok=True)
     logger.info("Dataset saved to %s (%d rows)", output_dir, len(ds))
 
     # 6. Optionally push to Hub
     if args.push_to_hub:
-        hub_name = dapt_cfg.get("output_adapter", "").replace("-adapter", "") + "-corpus"
+        hub_name = dapt_cfg.get(
+            "corpus_dataset",
+            dapt_cfg.get("output_adapter", "").replace("-adapter", "") + "-corpus",
+        )
         if not hub_name or hub_name == "-corpus":
             hub_name = "dapt-offsec-corpus"
         logger.info("Pushing dataset to Hub: %s", hub_name)

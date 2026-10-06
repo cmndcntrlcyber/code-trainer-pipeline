@@ -1,0 +1,78 @@
+{
+  "train": {
+    "total": 4624,
+    "by_slice": {
+      "tool_calling": 2705,
+      "instruction": 909,
+      "code_gen": 880,
+      "identity": 130
+    },
+    "has_tools": {
+      "True": 2705,
+      "False": 1919
+    },
+    "n_turns": {
+      "min": 3,
+      "max": 15,
+      "mean": 5.6
+    },
+    "top_categories": {
+      "function_calling": 2705,
+      "general": 881,
+      "typescript": 183,
+      "java": 158,
+      "csharp": 156,
+      "python": 117,
+      "cpp": 107,
+      "go": 77,
+      "rust": 49,
+      "identity": 42,
+      "capability": 42,
+      "javascript": 33,
+      "scope": 24,
+      "engagement": 22,
+      "orca": 12,
+      "coding": 4,
+      "wordgame": 3,
+      "plan": 3,
+      "trivia": 2,
+      "stylized_response": 2
+    }
+  },
+  "validation": {
+    "total": 513,
+    "by_slice": {
+      "tool_calling": 295,
+      "instruction": 91,
+      "identity": 20,
+      "code_gen": 107
+    },
+    "has_tools": {
+      "True": 295,
+      "False": 218
+    },
+    "n_turns": {
+      "min": 3,
+      "max": 11,
+      "mean": 5.5
+    },
+    "top_categories": {
+      "function_calling": 295,
+      "general": 88,
+      "java": 22,
+      "typescript": 18,
+      "go": 14,
+      "cpp": 14,
+      "python": 13,
+      "csharp": 13,
+      "rust": 7,
+      "javascript": 6,
+      "scope": 6,
+      "identity": 5,
+      "capability": 5,
+      "engagement": 4,
+      "writing": 2,
+      "multiple_choice": 1
+    }
+  }
+}

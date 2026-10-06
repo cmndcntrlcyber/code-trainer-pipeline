@@ -59,12 +59,20 @@ def main():
     parser.add_argument("--wait", action="store_true")
     parser.add_argument("--adapter", default=None,
                         help="Override rl_training.dpo.base_adapter")
+    parser.add_argument("--role", default=None,
+                        help="Swarm role — reads config from <role>.rl.dpo")
     args = parser.parse_args()
 
     config = load_config(args.config)
-    rl_cfg = config.get("rl_training", {})
-    dpo_cfg = rl_cfg.get("dpo", {})
-    cloud_cfg = rl_cfg.get("cloud", {})
+    if args.role:
+        role_cfg = config.get(args.role, {})
+        rl_cfg = role_cfg.get("rl", {})
+        dpo_cfg = rl_cfg.get("dpo", {})
+        cloud_cfg = role_cfg.get("cloud", {})
+    else:
+        rl_cfg = config.get("rl_training", {})
+        dpo_cfg = rl_cfg.get("dpo", {})
+        cloud_cfg = rl_cfg.get("cloud", {})
 
     base_adapter = args.adapter or dpo_cfg.get("base_adapter")
     base_model = dpo_cfg.get("base_model", "Qwen/Qwen2.5-Coder-14B-Instruct")

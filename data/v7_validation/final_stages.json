@@ -1,4 +1,5 @@
 {
+  "tool_calling": "COMPLETED",
   "agent": "COMPLETED",
-  "tool_calling": "COMPLETED"
+  "eval_loss": "COMPLETED"
 }

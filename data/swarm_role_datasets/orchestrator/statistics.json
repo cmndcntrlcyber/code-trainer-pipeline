@@ -1,0 +1,86 @@
+{
+  "train": {
+    "total": 14262,
+    "by_slice": {
+      "tool_calling": 5403,
+      "agentic": 2713,
+      "delegation": 454,
+      "instruction": 1788,
+      "code_gen": 3549,
+      "identity": 355
+    },
+    "has_tools": {
+      "True": 8570,
+      "False": 5692
+    },
+    "n_turns": {
+      "min": 3,
+      "max": 58,
+      "mean": 5.6
+    },
+    "top_categories": {
+      "function_calling": 5403,
+      "general": 1723,
+      "csharp": 689,
+      "typescript": 675,
+      "java": 649,
+      "orchestrator_delegation": 454,
+      "python": 448,
+      "cpp": 427,
+      "dependency-planning": 424,
+      "build-game": 348,
+      "go": 305,
+      "rust": 213,
+      "build-lib": 146,
+      "javascript": 143,
+      "identity": 111,
+      "scope": 93,
+      "capability": 88,
+      "build-async": 78,
+      "engagement": 63,
+      "build-parsing": 56
+    }
+  },
+  "validation": {
+    "total": 1584,
+    "by_slice": {
+      "instruction": 212,
+      "tool_calling": 597,
+      "delegation": 46,
+      "code_gen": 397,
+      "agentic": 287,
+      "identity": 45
+    },
+    "has_tools": {
+      "False": 654,
+      "True": 930
+    },
+    "n_turns": {
+      "min": 3,
+      "max": 47,
+      "mean": 5.6
+    },
+    "top_categories": {
+      "function_calling": 597,
+      "general": 208,
+      "csharp": 80,
+      "java": 78,
+      "typescript": 74,
+      "python": 52,
+      "build-game": 47,
+      "dependency-planning": 47,
+      "orchestrator_delegation": 46,
+      "cpp": 43,
+      "go": 37,
+      "rust": 19,
+      "build-lib": 18,
+      "javascript": 14,
+      "identity": 13,
+      "scope": 12,
+      "capability": 11,
+      "engagement": 9,
+      "build-parsing": 9,
+      "debug-concurrency": 8
+    }
+  }
+}

@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from datasets import Dataset, DatasetDict, load_dataset
 
 from src.config.nexus_identity import build_nexus_system_prompt
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 from src.phase2_preprocessing.converters.tool_format_converter import validate_messages
 from src.phase4_qwen_finetuning.hf_skills.nexus_tools import NEXUS_TOOLS_V10
 
@@ -239,6 +239,7 @@ def main():
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    ensure_cwd()
     dataset_dict.save_to_disk(str(output_dir))
     stats_path = output_dir / "statistics.json"
     stats_path.write_text(json.dumps(stats, indent=2))

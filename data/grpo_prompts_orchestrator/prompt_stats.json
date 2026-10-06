@@ -1,0 +1,9 @@
+{
+  "total_prompts": 98,
+  "sources": {
+    "synthetic": 38,
+    "role_orchestrator": 10,
+    "tool_selection_exercise": 37,
+    "v10_eval": 13
+  }
+}

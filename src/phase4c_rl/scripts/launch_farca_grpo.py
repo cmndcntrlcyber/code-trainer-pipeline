@@ -62,12 +62,20 @@ def main():
     parser.add_argument("--wait", action="store_true")
     parser.add_argument("--adapter", default=None,
                         help="Override rl_training.farca_grpo.base_adapter")
+    parser.add_argument("--role", default=None,
+                        help="Swarm role — reads config from <role>.rl.farca_grpo")
     args = parser.parse_args()
 
     config = load_config(args.config)
-    rl_cfg = config.get("rl_training", {})
-    farca_cfg = rl_cfg.get("farca_grpo", {})
-    cloud_cfg = rl_cfg.get("cloud", {})
+    if args.role:
+        role_cfg = config.get(args.role, {})
+        rl_cfg = role_cfg.get("rl", {})
+        farca_cfg = rl_cfg.get("farca_grpo", {})
+        cloud_cfg = role_cfg.get("cloud", {})
+    else:
+        rl_cfg = config.get("rl_training", {})
+        farca_cfg = rl_cfg.get("farca_grpo", {})
+        cloud_cfg = rl_cfg.get("cloud", {})
 
     if not farca_cfg:
         raise SystemExit(

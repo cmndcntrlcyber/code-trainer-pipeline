@@ -1,0 +1,8 @@
+{
+  "total_prompts": 61,
+  "sources": {
+    "synthetic": 38,
+    "role_explore": 10,
+    "v10_eval": 13
+  }
+}

@@ -59,11 +59,18 @@ def main():
                         help="Override abliteration.source_adapter")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--wait", action="store_true")
+    parser.add_argument("--role", default=None,
+                        help="Swarm role — reads config from <role>.abliteration")
     args = parser.parse_args()
 
     config = load_config(args.config)
-    abl_cfg = config.get("abliteration", {})
-    cloud_cfg = abl_cfg.get("cloud", {})
+    if args.role:
+        role_cfg = config.get(args.role, {})
+        abl_cfg = role_cfg.get("abliteration", {})
+        cloud_cfg = abl_cfg.get("cloud", role_cfg.get("cloud", {}))
+    else:
+        abl_cfg = config.get("abliteration", {})
+        cloud_cfg = abl_cfg.get("cloud", {})
 
     adapter_repo = args.adapter or abl_cfg.get("source_adapter")
     base_model = abl_cfg.get("base_model", "Qwen/Qwen2.5-Coder-14B-Instruct")

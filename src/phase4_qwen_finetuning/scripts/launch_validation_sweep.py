@@ -33,7 +33,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 from src.phase4_qwen_finetuning.configs.sweep_configs import SWEEP_CONFIG_MAP, SWEEP_CONFIGS
 # Re-use Phase 3's HF Jobs primitives — VisionJobSpec is generic despite its name.
 from src.phase3_vision_model.hf_skills import (
@@ -188,6 +188,7 @@ def main():
         print(f"JOB_ID[{name}]={jid}")
         time.sleep(2)  # gentle stagger
 
+    ensure_cwd()
     Path("data/sweep_results").mkdir(parents=True, exist_ok=True)
     Path("data/sweep_results/job_ids.json").write_text(json.dumps(job_ids, indent=2))
     logger.info("All %d job(s) submitted; ids written to data/sweep_results/job_ids.json", len(job_ids))
@@ -210,6 +211,7 @@ def main():
             finals[name] = stage
             logger.info(f"  [{name}] final stage: {stage}")
 
+    ensure_cwd()
     Path("data/sweep_results/final_stages.json").write_text(json.dumps(finals, indent=2))
     if not all(s == "COMPLETED" for s in finals.values()):
         logger.error("One or more sweep jobs did not complete: %s", finals)

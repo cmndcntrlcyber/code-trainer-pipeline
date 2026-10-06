@@ -424,9 +424,8 @@ explore:
     context_length: 4096
     port: 8086
     gguf_repo: ${HF_USERNAME}/gemma4-4b-explore-gguf
-    source_adapter: ${HF_USERNAME}/gemma4-4b-explore-dpo
+    source_adapter: ${HF_USERNAME}/gemma4-4b-explore-grpo
     adapter_chain:
-      - ${HF_USERNAME}/gemma4-4b-dapt-classify
       - ${HF_USERNAME}/gemma4-4b-explore-sft
     base_model: "google/gemma-3-4b-it"
 

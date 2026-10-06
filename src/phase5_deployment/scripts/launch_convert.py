@@ -68,11 +68,18 @@ def main():
                         help="Quantization levels (default: deployment.cloud.quants)")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--wait", action="store_true")
+    parser.add_argument("--role", default=None,
+                        help="Swarm role — reads config from <role>.deployment")
     args = parser.parse_args()
 
     config = load_config(args.config)
-    dep_cfg = config.get("deployment", {})
-    cloud_cfg = dep_cfg.get("cloud", {})
+    if args.role:
+        role_cfg = config.get(args.role, {})
+        dep_cfg = role_cfg.get("deployment", {})
+        cloud_cfg = role_cfg.get("cloud", {})
+    else:
+        dep_cfg = config.get("deployment", {})
+        cloud_cfg = dep_cfg.get("cloud", {})
 
     adapter_repo = args.adapter or dep_cfg.get("source_adapter")
     gguf_repo = args.gguf_repo or dep_cfg.get("gguf_repo")

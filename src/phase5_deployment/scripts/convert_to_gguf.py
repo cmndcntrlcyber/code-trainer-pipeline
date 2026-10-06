@@ -18,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 from src.phase5_deployment.gguf.converter import GGUFConverter
 from src.phase5_deployment.gguf.uploader import GGUFUploader
 
@@ -63,6 +63,7 @@ def main():
     logger.info(f"GGUF ready: {gguf_path} ({gguf_path.stat().st_size / 1e9:.1f} GB)")
 
     # Upload to Hub
+    ensure_cwd()
     if args.push_to_hub:
         if not hf_token:
             logger.error("HF_TOKEN not set — cannot push to Hub")

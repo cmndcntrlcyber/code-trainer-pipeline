@@ -1,0 +1,68 @@
+{
+  "train": {
+    "total": 2340,
+    "by_slice": {
+      "routing": 1806,
+      "routing_edge": 447,
+      "identity": 87
+    },
+    "has_tools": {
+      "False": 2340
+    },
+    "n_turns": {
+      "min": 3,
+      "max": 3,
+      "mean": 3.0
+    },
+    "top_categories": {
+      "triage_exploit": 456,
+      "triage_recon": 453,
+      "triage_admin": 271,
+      "triage_code-review": 268,
+      "triage_edge_recon": 194,
+      "triage_report": 183,
+      "triage_unknown": 175,
+      "triage_edge_exploit": 112,
+      "triage_edge_unknown": 87,
+      "triage_edge_report": 29,
+      "identity": 29,
+      "capability": 29,
+      "triage_edge_admin": 25,
+      "engagement": 16,
+      "scope": 13
+    }
+  },
+  "validation": {
+    "total": 260,
+    "by_slice": {
+      "routing": 194,
+      "routing_edge": 53,
+      "identity": 13
+    },
+    "has_tools": {
+      "False": 260
+    },
+    "n_turns": {
+      "min": 3,
+      "max": 3,
+      "mean": 3.0
+    },
+    "top_categories": {
+      "triage_recon": 47,
+      "triage_exploit": 44,
+      "triage_code-review": 32,
+      "triage_admin": 29,
+      "triage_unknown": 25,
+      "triage_edge_recon": 24,
+      "triage_report": 17,
+      "triage_edge_unknown": 12,
+      "triage_edge_exploit": 9,
+      "scope": 6,
+      "triage_edge_admin": 4,
+      "triage_edge_report": 4,
+      "engagement": 4,
+      "capability": 2,
+      "identity": 1
+    }
+  }
+}

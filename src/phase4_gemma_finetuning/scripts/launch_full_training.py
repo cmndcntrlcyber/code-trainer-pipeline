@@ -25,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 from src.phase4_gemma_finetuning.configs.sweep_configs import SWEEP_CONFIG_MAP, SWEEP_CONFIGS
 from src.phase3_vision_model.hf_skills import (
     VisionJobSpec as JobSpec,
@@ -211,6 +211,7 @@ def main():
         print(f"JOB_ID[{name}]={jid}")
         time.sleep(2)
 
+    ensure_cwd()
     Path("data/sweep_results").mkdir(parents=True, exist_ok=True)
     Path("data/sweep_results/gemma_full_training_job_ids.json").write_text(
         json.dumps(job_ids, indent=2)

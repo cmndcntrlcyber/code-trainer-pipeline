@@ -28,7 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 from src.phase3_vision_model.hf_skills import (
     VisionJobSpec as JobSpec,
     submit_vision_job as submit_job,
@@ -152,6 +152,7 @@ def main():
     jid = submit_job(spec, token=hf_token)
     print(f"JOB_ID={jid}")
 
+    ensure_cwd()
     Path("data/sweep_results").mkdir(parents=True, exist_ok=True)
     Path("data/sweep_results/gemma_vision_sft_job_id.json").write_text(
         json.dumps({"job_id": jid, "adapter": output_adapter}, indent=2)

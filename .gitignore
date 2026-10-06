@@ -80,6 +80,7 @@ data/dapt_merged.jsonl
 data/grpo_prompts/
 data/oco_converted/
 data/rl_training/
+data/rl_negatives/
 data/rl_data/
 data/dpo_pairs/
 data/identity_examples/

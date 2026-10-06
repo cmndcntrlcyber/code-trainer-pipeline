@@ -1,0 +1,84 @@
+{
+  "train": {
+    "total": 8258,
+    "by_slice": {
+      "tool_calling": 4482,
+      "identity": 182,
+      "code_gen": 1782,
+      "instruction": 905,
+      "agentic": 907
+    },
+    "has_tools": {
+      "True": 5389,
+      "False": 2869
+    },
+    "n_turns": {
+      "min": 3,
+      "max": 15,
+      "mean": 5.9
+    },
+    "top_categories": {
+      "function_calling": 4482,
+      "general": 879,
+      "typescript": 344,
+      "csharp": 337,
+      "java": 329,
+      "python": 229,
+      "cpp": 201,
+      "go": 167,
+      "dependency-planning": 125,
+      "build-game": 110,
+      "rust": 106,
+      "javascript": 69,
+      "identity": 59,
+      "capability": 51,
+      "build-lib": 47,
+      "scope": 45,
+      "build-async": 31,
+      "engagement": 27,
+      "debug-async": 19,
+      "build-cli": 16
+    }
+  },
+  "validation": {
+    "total": 917,
+    "by_slice": {
+      "code_gen": 193,
+      "tool_calling": 518,
+      "agentic": 93,
+      "instruction": 95,
+      "identity": 18
+    },
+    "has_tools": {
+      "False": 306,
+      "True": 611
+    },
+    "n_turns": {
+      "min": 3,
+      "max": 13,
+      "mean": 6.0
+    },
+    "top_categories": {
+      "function_calling": 518,
+      "general": 90,
+      "java": 37,
+      "typescript": 33,
+      "csharp": 32,
+      "cpp": 27,
+      "python": 26,
+      "build-game": 16,
+      "javascript": 14,
+      "dependency-planning": 14,
+      "go": 14,
+      "rust": 10,
+      "capability": 7,
+      "identity": 4,
+      "engagement": 4,
+      "compilefix-csharp": 3,
+      "build-cli": 3,
+      "error-recovery": 3,
+      "build-async": 3,
+      "scope": 3
+    }
+  }
+}

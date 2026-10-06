@@ -1,0 +1,98 @@
+{"prompt": "Update src/main.py to use 'debug = False' instead of 'debug = True'.", "source": "synthetic", "expected_tool": "Edit"}
+{"prompt": "Write a config file at /etc/hosts with database settings.", "source": "synthetic", "expected_tool": "Write"}
+{"prompt": "Audit the web application at https://target.htb for OWASP Top 10 vulnerabilities and generate a report.", "source": "role_orchestrator", "expected_tool": "Task"}
+{"prompt": "Is 10.10.10.5 in scope for this assessment?", "source": "synthetic", "expected_tool": "ScopeCheck"}
+{"prompt": "Where is 'exec(' used?", "source": "tool_selection_exercise", "expected_tool": "Grep"}
+{"prompt": "Save the following to data/output.json: parse command-line arguments.", "source": "synthetic", "expected_tool": "Write"}
+{"prompt": "In main.py, replace 'debug = True' with 'debug = False'.", "source": "v10_eval", "expected_tool": "Edit", "scenario_name": "edit_file"}
+{"prompt": "Search for 'password' in the /etc/hosts directory.", "source": "synthetic", "expected_tool": "Grep"}
+{"prompt": "What files are in the /etc/hosts directory?", "source": "synthetic", "expected_tool": "LS"}
+{"prompt": "What files are in the current directory?", "source": "v10_eval", "expected_tool": "LS", "scenario_name": "list_directory"}
+{"prompt": "Check all files in /var/www/html for hardcoded credentials, then test any found credentials against the SSH service.", "source": "role_orchestrator", "expected_tool": "Task"}
+{"prompt": "Display src/main.py.", "source": "tool_selection_exercise", "expected_tool": "Read"}
+{"prompt": "Find all shell scripts in the project.", "source": "tool_selection_exercise", "expected_tool": "Glob"}
+{"prompt": "What does https://example.com say?", "source": "synthetic", "expected_tool": "WebFetch"}
+{"prompt": "Edit config.yaml to change the port from 8080 to 9090.", "source": "tool_selection_exercise", "expected_tool": "Edit"}
+{"prompt": "Where is 'def main' defined in the source code?", "source": "synthetic", "expected_tool": "Grep"}
+{"prompt": "Execute: whoami.", "source": "tool_selection_exercise", "expected_tool": "Bash"}
+{"prompt": "Create a Python script that scans for open ports.", "source": "tool_selection_exercise", "expected_tool": "Write"}
+{"prompt": "Create a todo list with the following items: parse command-line arguments.", "source": "synthetic", "expected_tool": "TodoWrite"}
+{"prompt": "What does /etc/shadow contain?", "source": "tool_selection_exercise", "expected_tool": "Read"}
+{"prompt": "Run an nmap scan against 10.10.10.5.", "source": "synthetic", "expected_tool": "Skill"}
+{"prompt": "Check database settings by running the appropriate command.", "source": "synthetic", "expected_tool": "Bash"}
+{"prompt": "Write a reverse shell payload to /tmp/shell.py.", "source": "tool_selection_exercise", "expected_tool": "Write"}
+{"prompt": "Show me the contents of /etc/hostname.", "source": "v10_eval", "expected_tool": "Read", "scenario_name": "read_file"}
+{"prompt": "Read the SSH config at ~/.ssh/config.", "source": "tool_selection_exercise", "expected_tool": "Read"}
+{"prompt": "What files are in /tmp?", "source": "tool_selection_exercise", "expected_tool": "LS"}
+{"prompt": "Search the codebase for hardcoded API keys.", "source": "tool_selection_exercise", "expected_tool": "Grep"}
+{"prompt": "Find all *.py files in this project.", "source": "synthetic", "expected_tool": "Glob"}
+{"prompt": "Have the exploiter agent test the SQL injection.", "source": "tool_selection_exercise", "expected_tool": "Task"}
+{"prompt": "Fetch the contents of https://example.com and summarize the page.", "source": "v10_eval", "expected_tool": "WebFetch", "scenario_name": "fetch_url"}
+{"prompt": "Before we scan 10.10.10.5, check if it's within our authorized engagement scope.", "source": "v10_eval", "expected_tool": "ScopeCheck", "scenario_name": "check_scope"}
+{"prompt": "Track these tasks: database settings.", "source": "synthetic", "expected_tool": "TodoWrite"}
+{"prompt": "Execute the command: uname -a", "source": "synthetic", "expected_tool": "Bash"}
+{"prompt": "Update /etc/shadow: replace 'v1' with 'debug=False'.", "source": "tool_selection_exercise", "expected_tool": "Edit"}
+{"prompt": "Perform a privilege escalation assessment: enumerate SUID binaries, cron jobs, and writable paths.", "source": "role_orchestrator", "expected_tool": "Task"}
+{"prompt": "Find all *.py files.", "source": "tool_selection_exercise", "expected_tool": "Glob"}
+{"prompt": "Open data/output.json so I can review it.", "source": "synthetic", "expected_tool": "Read"}
+{"prompt": "Map the attack surface of the target: DNS records, open ports, web technologies, and potential entry points.", "source": "role_orchestrator", "expected_tool": "Task"}
+{"prompt": "Perform a full reconnaissance of 10.10.10.5 including port scanning, service enumeration, and vulnerability assessment.", "source": "role_orchestrator", "expected_tool": "Task"}
+{"prompt": "Open and review ~/.bashrc.", "source": "tool_selection_exercise", "expected_tool": "Read"}
+{"prompt": "List *.py files under data/creds.txt.", "source": "tool_selection_exercise", "expected_tool": "Glob"}
+{"prompt": "Delegate subdomain enumeration to the recon agent.", "source": "tool_selection_exercise", "expected_tool": "Task"}
+{"prompt": "Show directory /etc/shadow.", "source": "tool_selection_exercise", "expected_tool": "LS"}
+{"prompt": "Fetch the contents of https://httpbin.org/get and summarize it.", "source": "synthetic", "expected_tool": "WebFetch"}
+{"prompt": "Show me the contents of data/output.json.", "source": "synthetic", "expected_tool": "Read"}
+{"prompt": "Find all YAML config files in this project.", "source": "v10_eval", "expected_tool": "Glob", "scenario_name": "find_files"}
+{"prompt": "Run curl -s ifconfig.me.", "source": "tool_selection_exercise", "expected_tool": "Bash"}
+{"prompt": "Show me the directory listing for tests/test_api.py.", "source": "synthetic", "expected_tool": "LS"}
+{"prompt": "Fetch the robots.txt from https://target.htb.", "source": "tool_selection_exercise", "expected_tool": "WebFetch"}
+{"prompt": "Run `uname -a` and tell me what OS this is.", "source": "v10_eval", "expected_tool": "Bash", "scenario_name": "run_command"}
+{"prompt": "Is 10.10.10.5 in scope?", "source": "tool_selection_exercise", "expected_tool": "ScopeCheck"}
+{"prompt": "Search for all occurrences of 'TODO' in the src/ directory.", "source": "v10_eval", "expected_tool": "Grep", "scenario_name": "search_code"}
+{"prompt": "Find 'TODO' across the codebase.", "source": "tool_selection_exercise", "expected_tool": "Grep"}
+{"prompt": "Before scanning 192.168.1.0/24, verify it's authorized.", "source": "synthetic", "expected_tool": "ScopeCheck"}
+{"prompt": "What's in /etc/shadow?", "source": "tool_selection_exercise", "expected_tool": "LS"}
+{"prompt": "Verify 10.10.10.0/24 is authorized for scanning.", "source": "tool_selection_exercise", "expected_tool": "ScopeCheck"}
+{"prompt": "Do a code review of the current changes.", "source": "synthetic", "expected_tool": "Skill"}
+{"prompt": "What's in the file src/main.py?", "source": "synthetic", "expected_tool": "Read"}
+{"prompt": "Find all YAML config files in the project.", "source": "tool_selection_exercise", "expected_tool": "Glob"}
+{"prompt": "Scan 192.168.1.0/24 for vulnerabilities with nuclei.", "source": "synthetic", "expected_tool": "Skill"}
+{"prompt": "Add to my todo list: fix the login bug, update docs, and run tests.", "source": "synthetic", "expected_tool": "TodoWrite"}
+{"prompt": "Show me /etc/shadow.", "source": "tool_selection_exercise", "expected_tool": "Read"}
+{"prompt": "Create a file called config.yaml with a basic Python script that database settings.", "source": "synthetic", "expected_tool": "Write"}
+{"prompt": "List what's in the /var/log directory.", "source": "tool_selection_exercise", "expected_tool": "LS"}
+{"prompt": "Run a directory brute-force with gobuster.", "source": "tool_selection_exercise", "expected_tool": "Bash"}
+{"prompt": "Read the file /etc/passwd and check for suspicious accounts.", "source": "tool_selection_exercise", "expected_tool": "Read"}
+{"prompt": "Find all occurrences of 'API_KEY' in the codebase.", "source": "synthetic", "expected_tool": "Grep"}
+{"prompt": "Fix the typo in src/main.py: change 'v1.0' to '0.0.0.0'.", "source": "synthetic", "expected_tool": "Edit"}
+{"prompt": "Run an nmap scan against the target 10.10.10.5.", "source": "v10_eval", "expected_tool": "Skill", "scenario_name": "invoke_skill"}
+{"prompt": "List every *.toml file under /etc/hosts.", "source": "synthetic", "expected_tool": "Glob"}
+{"prompt": "Run `pip list | grep torch` and show me the output.", "source": "synthetic", "expected_tool": "Bash"}
+{"prompt": "Delegate reconnaissance of 10.10.10.5 to the recon agent.", "source": "synthetic", "expected_tool": "Task"}
+{"prompt": "Ask the reporter agent to write up findings for 192.168.1.0/24.", "source": "synthetic", "expected_tool": "Task"}
+{"prompt": "In data/output.json, replace 'v1.0' with 'v2.0'.", "source": "synthetic", "expected_tool": "Edit"}
+{"prompt": "Download the page at https://target.htb/admin.", "source": "tool_selection_exercise", "expected_tool": "WebFetch"}
+{"prompt": "Coordinate a full engagement: scope check, recon, vulnerability scan, exploitation, and report generation.", "source": "role_orchestrator", "expected_tool": "Task"}
+{"prompt": "What configuration files exist in the project?", "source": "synthetic", "expected_tool": "Glob"}
+{"prompt": "Investigate the suspicious process on port 4444: identify it, check for persistence mechanisms, and document findings.", "source": "role_orchestrator", "expected_tool": "Task"}
+{"prompt": "Run the test suite with pytest and tell me if anything fails.", "source": "v10_eval", "expected_tool": "Bash", "scenario_name": "run_tests"}
+{"prompt": "Check scope for target.htb.", "source": "tool_selection_exercise", "expected_tool": "ScopeCheck"}
+{"prompt": "Scan the network 192.168.1.0/24 for live hosts, identify services, and prioritize targets by attack surface.", "source": "role_orchestrator", "expected_tool": "Task"}
+{"prompt": "Enumerate all subdomains of target.htb, scan each for open ports, and identify potential entry points.", "source": "role_orchestrator", "expected_tool": "Task"}
+{"prompt": "Install numpy and pandas using the package manager.", "source": "synthetic", "expected_tool": "Bash"}
+{"prompt": "Create a file called hello.py with a basic 'Hello World' script.", "source": "v10_eval", "expected_tool": "Write", "scenario_name": "write_file"}
+{"prompt": "I need to do three things: fix the login bug, update the README, and run tests. Track these as a todo list.", "source": "v10_eval", "expected_tool": "TodoWrite", "scenario_name": "track_todos"}
+{"prompt": "List the contents of /etc/hosts.", "source": "synthetic", "expected_tool": "LS"}
+{"prompt": "Search for 'password' in all Python files.", "source": "tool_selection_exercise", "expected_tool": "Grep"}
+{"prompt": "Have the web-hunter agent test 192.168.1.0/24 for XSS.", "source": "synthetic", "expected_tool": "Task"}
+{"prompt": "Search for 'secret' in src/main.py.", "source": "tool_selection_exercise", "expected_tool": "Grep"}
+{"prompt": "Run nmap against the target 10.10.10.5.", "source": "tool_selection_exercise", "expected_tool": "Bash"}
+{"prompt": "Download the page at https://httpbin.org/get.", "source": "synthetic", "expected_tool": "WebFetch"}
+{"prompt": "Check if 192.168.1.100 is in our engagement scope.", "source": "tool_selection_exercise", "expected_tool": "ScopeCheck"}
+{"prompt": "Delegate reconnaissance of the target network 192.168.1.0/24 to the recon agent.", "source": "v10_eval", "expected_tool": "Task", "scenario_name": "delegate_to_subagent"}
+{"prompt": "Check if target.htb is within our engagement scope.", "source": "synthetic", "expected_tool": "ScopeCheck"}
+{"prompt": "Read src/main.py and summarize what it does.", "source": "synthetic", "expected_tool": "Read"}
+{"prompt": "Fix the typo in main.py: change 'recieve' to 'receive'.", "source": "tool_selection_exercise", "expected_tool": "Edit"}
+{"prompt": "In src/main.py, change 'debug=True' to 'v2'.", "source": "tool_selection_exercise", "expected_tool": "Edit"}
+{"prompt": "Review the source code in src/ for security vulnerabilities, then write exploits for any critical findings.", "source": "role_orchestrator", "expected_tool": "Task"}

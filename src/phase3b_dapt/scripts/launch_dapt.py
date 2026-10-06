@@ -57,10 +57,16 @@ def main():
     parser.add_argument("--config", default="src/config/config.yaml")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--wait", action="store_true")
+    parser.add_argument("--role", default=None,
+                        help="Swarm role — reads DAPT config from <role>.dapt section")
     args = parser.parse_args()
 
     config = load_config(args.config)
-    dapt_cfg = config.get("dapt") or config.get("gemma_dapt") or {}
+    if args.role:
+        role_cfg = config.get(args.role, {})
+        dapt_cfg = role_cfg.get("dapt", {})
+    else:
+        dapt_cfg = config.get("dapt") or config.get("gemma_dapt") or {}
     cloud_cfg = dapt_cfg.get("cloud", {})
 
     base_model = dapt_cfg.get("base_model", "Qwen/Qwen2.5-Coder-14B-Instruct")
@@ -68,9 +74,12 @@ def main():
     if not output_adapter:
         raise SystemExit("dapt.output_adapter not set in config")
 
-    # The dataset must already be on Hub (prepared by prepare_corpus.py --push-to-hub).
-    # Convention: adapter repo name with "-corpus" suffix.
-    dataset_id = output_adapter.replace("-adapter", "") + "-corpus"
+    # Dataset can be explicit in config or derived from adapter name.
+    # Must already exist on Hub (prepared by prepare_corpus.py --push-to-hub).
+    dataset_id = dapt_cfg.get(
+        "corpus_dataset",
+        output_adapter.replace("-adapter", "") + "-corpus",
+    )
 
     hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN") or ""
     if not args.dry_run and not hf_token:

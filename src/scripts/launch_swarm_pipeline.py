@@ -2,42 +2,43 @@
 src/scripts/launch_swarm_pipeline.py
 
 Top-level orchestrator for NEXUS swarm multi-role training. Reads
-pipeline-swarm-v4a.yml and launches each role's training phases as
+pipeline-swarm-v4a-max.yml and launches each role's training phases as
 independent HF Jobs. Roles use different base models so they can
 run in parallel.
 
-Role phase chains:
-    orchestrator: SFT -> validation -> FARCA-GRPO -> DPO -> validation -> GGUF
-    worker:       SFT -> validation -> GRPO -> validation -> GGUF
-    explore:      SFT -> validation -> GGUF
-    triage:       SFT -> validation -> RKLLM
+Role phase chains (max quality):
+    orchestrator: DAPT -> SFT -> validation -> FARCA-GRPO -> DPO -> validation -> GGUF -> abliteration
+    worker:       DAPT -> SFT -> validation -> FARCA-GRPO -> DPO -> validation -> GGUF
+    explore:      DAPT -> SFT -> validation -> GRPO -> DPO -> validation -> GGUF
+    triage:       SFT -> validation -> GRPO -> validation -> RKLLM
 
 Usage:
     set -a && source .env && set +a
 
-    # Launch all four roles:
-    python -m src.scripts.launch_swarm_pipeline \
-        --config src/config/pipeline-swarm-v4a.yml --role all --wait
+    # Launch all four roles in parallel:
+    uv run python -m src.scripts.launch_swarm_pipeline \
+        --config src/config/pipeline-swarm-v4a-max.yml --role all --wait
 
     # Launch specific roles:
-    python -m src.scripts.launch_swarm_pipeline \
-        --config src/config/pipeline-swarm-v4a.yml --role orchestrator worker --wait
+    uv run python -m src.scripts.launch_swarm_pipeline \
+        --config src/config/pipeline-swarm-v4a-max.yml --role orchestrator worker --wait
 
     # Single role:
-    python -m src.scripts.launch_swarm_pipeline \
-        --config src/config/pipeline-swarm-v4a.yml --role orchestrator --wait
+    uv run python -m src.scripts.launch_swarm_pipeline \
+        --config src/config/pipeline-swarm-v4a-max.yml --role orchestrator --wait
 
     # Single phase across roles:
-    python -m src.scripts.launch_swarm_pipeline \
-        --config src/config/pipeline-swarm-v4a.yml --role all --phase sft --wait
+    uv run python -m src.scripts.launch_swarm_pipeline \
+        --config src/config/pipeline-swarm-v4a-max.yml --role all --phase sft --wait
 
     # Dry-run:
-    python -m src.scripts.launch_swarm_pipeline \
-        --config src/config/pipeline-swarm-v4a.yml --role all --dry-run
+    uv run python -m src.scripts.launch_swarm_pipeline \
+        --config src/config/pipeline-swarm-v4a-max.yml --role all --dry-run
 """
 import argparse
 import json
 import logging
+import os
 import subprocess
 import sys
 import time
@@ -48,7 +49,7 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from src.config.settings import load_config
+from src.config.settings import ensure_cwd, load_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -76,33 +77,49 @@ class Step:
 
 ROLE_CHAINS: dict[str, list[Step]] = {
     "orchestrator": [
+        Step("sft", "DAPT", "src.phase3b_dapt.scripts.launch_dapt"),
         Step("sft", "SFT", "src.phase4_qwen_finetuning.scripts.launch_full_training"),
-        Step("sft", "Validation (post-SFT)", "src.phase4_qwen_finetuning.scripts.launch_benchmark"),
+        Step("sft", "Validation (post-SFT)", "src.phase4_qwen_finetuning.scripts.launch_v7_validation"),
         Step("rl", "FARCA-GRPO", "src.phase4c_rl.scripts.launch_farca_grpo"),
         Step("rl", "DPO", "src.phase4c_rl.scripts.launch_dpo"),
-        Step("rl", "Validation (post-RL)", "src.phase4_qwen_finetuning.scripts.launch_benchmark"),
+        Step("rl", "Validation (post-RL)", "src.phase4_qwen_finetuning.scripts.launch_v7_validation"),
         Step("deploy", "GGUF Conversion", "src.phase5_deployment.scripts.launch_convert"),
+        Step("deploy", "Abliteration", "src.phase5b_abliteration.scripts.launch_abliteration"),
     ],
     "worker": [
+        Step("sft", "DAPT", "src.phase3b_dapt.scripts.launch_dapt"),
         Step("sft", "SFT", "src.phase4_qwen_finetuning.scripts.launch_full_training"),
-        Step("sft", "Validation (post-SFT)", "src.phase4_qwen_finetuning.scripts.launch_benchmark"),
-        Step("rl", "GRPO", "src.phase4c_rl.scripts.launch_grpo"),
-        Step("rl", "Validation (post-RL)", "src.phase4_qwen_finetuning.scripts.launch_benchmark"),
+        Step("sft", "Validation (post-SFT)", "src.phase4_qwen_finetuning.scripts.launch_v7_validation"),
+        Step("rl", "FARCA-GRPO", "src.phase4c_rl.scripts.launch_farca_grpo"),
+        Step("rl", "DPO", "src.phase4c_rl.scripts.launch_dpo"),
+        Step("rl", "Validation (post-RL)", "src.phase4_qwen_finetuning.scripts.launch_v7_validation"),
         Step("deploy", "GGUF Conversion", "src.phase5_deployment.scripts.launch_convert"),
     ],
     "explore": [
-        Step("sft", "SFT", "src.phase4_qwen_finetuning.scripts.launch_full_training"),
-        Step("sft", "Validation (post-SFT)", "src.phase4_qwen_finetuning.scripts.launch_benchmark"),
-        Step("deploy", "GGUF Conversion", "src.phase5_deployment.scripts.launch_convert"),
+        Step("sft", "DAPT", "src.phase3b_dapt.scripts.launch_dapt"),
+        Step("sft", "SFT", "src.phase4_gemma_finetuning.scripts.launch_full_training"),
+        Step("sft", "Validation (post-SFT)", "src.phase4_qwen_finetuning.scripts.launch_v7_validation"),
+        Step("rl", "GRPO", "src.phase4c_rl.scripts.launch_grpo"),
+        Step("rl", "DPO", "src.phase4c_rl.scripts.launch_dpo"),
+        Step("rl", "Validation (post-RL)", "src.phase4_qwen_finetuning.scripts.launch_v7_validation"),
+        Step("deploy", "GGUF Conversion", "src.phase5_gemma_deployment.scripts.launch_convert"),
     ],
     "triage": [
         Step("sft", "SFT", "src.phase4_qwen_finetuning.scripts.launch_full_training"),
-        Step("sft", "Validation (post-SFT)", "src.phase4_qwen_finetuning.scripts.launch_benchmark"),
-        Step("deploy", "RKLLM Conversion", "src.phase5_deployment.scripts.launch_convert"),
+        Step("sft", "Validation (post-SFT)", "src.phase4_qwen_finetuning.scripts.launch_v7_validation"),
+        Step("rl", "GRPO", "src.phase4c_rl.scripts.launch_grpo"),
+        Step("rl", "Validation (post-RL)", "src.phase4_qwen_finetuning.scripts.launch_v7_validation"),
+        Step("deploy", "RKLLM Conversion", "src.phase5_triage_deployment.scripts.convert_to_rkllm"),
     ],
 }
 
 PHASE_CHOICES = ["sft", "rl", "deploy"]
+
+REQUIRED_ENV_VARS = ["HF_TOKEN", "HF_USERNAME"]
+
+PREFLIGHT_FILES = [
+    ("data/identity_examples/nexus_identity.jsonl", "Run: uv run python -m src.phase2_preprocessing.scripts.build_identity_examples --output data/identity_examples/nexus_identity.jsonl --count 400"),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +148,56 @@ def read_role_config(config: dict, role: str) -> dict:
     """Extract the per-role section from the pipeline config."""
     role_cfg = config.get(role, config.get("roles", {}).get(role, {}))
     return role_cfg if isinstance(role_cfg, dict) else {}
+
+
+def preflight_checks(config: dict, roles: list[str], dry_run: bool) -> list[str]:
+    """Validate environment and prerequisites before launching.
+
+    Returns a list of error strings (empty = all clear).
+    Checks drawn from recurring failure modes:
+      - Missing/invalid HF token (403 on Hub push)
+      - Missing env vars (HF_USERNAME defaults to wrong namespace)
+      - Missing prerequisite data files (identity examples, datasets)
+      - Stale CWD from /mnt/ssd remount
+    """
+    errors: list[str] = []
+
+    ensure_cwd()
+
+    for var in REQUIRED_ENV_VARS:
+        if not os.environ.get(var):
+            errors.append(f"Environment variable {var} is not set")
+
+    hf_token = os.environ.get("HF_TOKEN", "")
+    if hf_token and not dry_run:
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                "https://huggingface.co/api/whoami",
+                headers={"Authorization": f"Bearer {hf_token}"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if resp.status != 200:
+                    errors.append(f"HF token validation returned HTTP {resp.status}")
+        except Exception as exc:
+            errors.append(f"HF token invalid or expired: {exc}")
+
+    for rel_path, fix_hint in PREFLIGHT_FILES:
+        p = Path(rel_path)
+        if not p.exists():
+            errors.append(f"Missing: {rel_path} — {fix_hint}")
+
+    for role in roles:
+        role_cfg = read_role_config(config, role)
+        sft_cfg = role_cfg.get("sft", {})
+        dataset_id = sft_cfg.get("dataset_id", "")
+        if dataset_id and "${" in dataset_id:
+            errors.append(
+                f"[{role}] Unresolved variable in sft.dataset_id: {dataset_id} "
+                "— check that HF_USERNAME is exported before sourcing .env"
+            )
+
+    return errors
 
 
 def format_summary_table(
@@ -185,6 +252,8 @@ def run_step(
     dry_run: bool,
 ) -> int:
     """Execute a single step as a subprocess. Returns the exit code."""
+    ensure_cwd()
+
     cmd = [
         sys.executable, "-m", step.module,
         "--config", config_path,
@@ -203,11 +272,19 @@ def run_step(
         logger.info("[%s]   (dry-run) Would execute: %s", role, step.module)
         return 0
 
-    result = subprocess.run(cmd)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if result.stdout:
+        for line in result.stdout.strip().splitlines()[-20:]:
+            logger.info("[%s] %s | %s", role, step.name, line)
+
     if result.returncode != 0:
         logger.error(
             "[%s] Step %r FAILED (exit %d)", role, step.name, result.returncode
         )
+        if result.stderr:
+            for line in result.stderr.strip().splitlines()[-30:]:
+                logger.error("[%s] %s | %s", role, step.name, line)
     else:
         logger.info("[%s] Step %r completed successfully.", role, step.name)
     return result.returncode
@@ -226,6 +303,7 @@ def run_role_chain(
     previous (e.g. GRPO needs the SFT adapter). ``--wait`` is always
     passed to individual steps so each blocks before the next starts.
     """
+    ensure_cwd()
     steps = get_steps_for_role(role, phase_filter)
     if not steps:
         logger.warning("[%s] No steps to run (phase filter: %s).", role, phase_filter)
@@ -269,16 +347,16 @@ def main() -> int:
         description="NEXUS Swarm Pipeline — multi-role training orchestrator",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            "Roles:\n"
-            "  orchestrator  SFT -> validation -> FARCA-GRPO -> DPO -> validation -> GGUF\n"
-            "  worker        SFT -> validation -> GRPO -> validation -> GGUF\n"
-            "  explore       SFT -> validation -> GGUF\n"
-            "  triage        SFT -> validation -> RKLLM\n"
+            "Roles (max quality):\n"
+            "  orchestrator  DAPT -> SFT -> validation -> FARCA-GRPO -> DPO -> validation -> GGUF -> abliteration\n"
+            "  worker        DAPT -> SFT -> validation -> FARCA-GRPO -> DPO -> validation -> GGUF\n"
+            "  explore       DAPT -> SFT -> validation -> GRPO -> DPO -> validation -> GGUF\n"
+            "  triage        SFT -> validation -> GRPO -> validation -> RKLLM\n"
         ),
     )
     parser.add_argument(
         "--config",
-        default="src/config/pipeline-swarm-v4a.yml",
+        default="src/config/pipeline-swarm-v4a-max.yml",
         help="Path to the swarm pipeline YAML config (default: %(default)s)",
     )
     parser.add_argument(
@@ -307,9 +385,21 @@ def main() -> int:
     args = parser.parse_args()
 
     # -- Load config --------------------------------------------------------
+    ensure_cwd()
     config_path = str(Path(args.config).resolve())
     config = load_config(args.config)
     roles = resolve_roles(args.role)
+
+    # -- Preflight checks ---------------------------------------------------
+    errors = preflight_checks(config, roles, dry_run=args.dry_run)
+    if errors:
+        print("\n" + "=" * 60)
+        print("  PREFLIGHT FAILED — fix before launching")
+        print("=" * 60)
+        for err in errors:
+            print(f"  ✗ {err}")
+        print("=" * 60 + "\n")
+        return 1
 
     # -- Print summary table ------------------------------------------------
     summary = format_summary_table(roles, config, args.phase)
@@ -337,6 +427,7 @@ def main() -> int:
         return rc
 
     # Multiple roles — run in parallel.
+    ensure_cwd()
     logger.info("Launching %d roles in parallel.", len(roles))
     results: dict[str, int] = {}
 
